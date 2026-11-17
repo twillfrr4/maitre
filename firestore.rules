@@ -1,0 +1,19 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function logado(){ return request.auth != null && request.auth.token.email_verified == true && request.auth.token.email.matches('.*@boscoeventos[.]com[.]br$'); }
+    function email(){ return request.auth.token.email; }
+    function temPerfil(){ return exists(/databases/$(database)/documents/usuarios/$(email())); }
+    function perfil(){ return get(/databases/$(database)/documents/usuarios/$(email())).data; }
+    function gestao(){ return logado() && (email() == 'financeiro@boscoeventos.com.br' || (temPerfil() && perfil().perfil == 'gestao')); }
+    function comercial(){ return logado() && temPerfil() && perfil().perfil == 'comercial'; }
+    function membro(){ return gestao() || comercial(); }
+
+    match /usuarios/{e} { allow read: if logado() && (e == email() || gestao()); allow write: if gestao(); }
+    match /equipe/{id} { allow read: if membro(); allow write: if gestao(); }
+    match /config/{id} { allow read: if membro(); allow write: if gestao(); }
+    match /contadores/{id} { allow read, write: if membro(); }
+    match /vendas/{pasta}/{col}/{id} { allow read, write: if gestao() || (comercial() && pasta == 'eq-' + perfil().equipeId); }
+    match /{document=**} { allow read, write: if gestao(); }
+  }
+}
