@@ -1,7 +1,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function logado(){ return request.auth != null && request.auth.token.email_verified == true && request.auth.token.email.matches('.*@boscoeventos[.]com[.]br$'); }
+    function logado(){ return request.auth != null && request.auth.token.email_verified == true; }
     function email(){ return request.auth.token.email; }
     function temPerfil(){ return exists(/databases/$(database)/documents/usuarios/$(email())); }
     function perfil(){ return get(/databases/$(database)/documents/usuarios/$(email())).data; }
