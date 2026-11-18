@@ -349,6 +349,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
 <script>
 (function(){
 "use strict";
@@ -1568,7 +1569,7 @@ function tamanho(b){return b>=1048576?(b/1048576).toLocaleString("pt-BR",{maximu
 function readDataURL(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=()=>rej(r.error);r.readAsDataURL(file)})}
 async function enviarAnexo(file){
   if(!assetsCap)throw new Error("Envio de arquivos indisponível nesta visualização.");
-  const direto=DIRECT_TYPES.includes(file.type)||(/\.pdf$/i.test(file.name)&&!file.type);
+  const direto=true;
   let up;
   if(direto){
     if(file.size>20*1024*1024)throw new Error(`${file.name}: passa de 20 MB.`);
@@ -1585,6 +1586,12 @@ async function enviarAnexo(file){
 const PDFJS="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
 function loadScript(src){return new Promise((res,rej)=>{if(document.querySelector(`script[src="${src}"]`)){res();return}const t=document.createElement("script");t.src=src;t.onload=res;t.onerror=()=>rej(new Error("script"));document.head.appendChild(t)})}
 async function lerBlob(id,pack){
+  if(id.includes("/")&&window.__storage){
+    const url=await window.__storage.ref(id).getDownloadURL();
+    let r;try{r=await fetch(url)}catch(e){const er=new Error("cors");er.url=url;throw er}
+    if(!r.ok){const er=new Error("HTTP "+r.status);er.url=url;throw er}
+    return await r.blob();
+  }
   const r=await fetch("/_blob/"+id);if(!r.ok)throw new Error("HTTP "+r.status);
   if(!pack)return await r.blob();
   const j=await r.json();const bin=atob(j.b64);const u8=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);
@@ -1593,11 +1600,17 @@ async function lerBlob(id,pack){
 async function baixarArquivo(id,nome,pack,blob){
   if(!dlCap){toast("Download indisponível nesta visualização");return}
   try{const b=blob||await lerBlob(id,pack);await dlCap.save({filename:nome||"arquivo",data:b})}
-  catch(e){if(e&&e.code==="declined")return;toast("Não foi possível baixar"+(e&&e.code?" ("+e.code+")":""))}
+  catch(e){if(e&&e.code==="declined")return;if(e&&e.url){linkArquivo(e.url,nome);return}toast("Não foi possível baixar"+(e&&e.code?" ("+e.code+")":""))}
 }
 const vw=document.getElementById("viewer");let vwUrl=null;
 document.getElementById("vwClose").onclick=()=>vw.close();
 vw.addEventListener("close",()=>{if(vwUrl){URL.revokeObjectURL(vwUrl);vwUrl=null}document.getElementById("vwBody").innerHTML=""});
+function linkArquivo(url,nome){
+  const body=document.getElementById("vwBody");document.getElementById("vwTitle").textContent=nome||"Documento";
+  document.getElementById("vwDown").onclick=()=>window.open(url,"_blank","noopener");
+  body.innerHTML=`<div class="empty"><strong>${esc(nome||"Arquivo")}</strong><a class="btn primary" href="${esc(url)}" target="_blank" rel="noopener" style="margin-top:10px">Abrir o arquivo</a></div>`;
+  if(!vw.open)vw.showModal();
+}
 async function verArquivo(id,nome,pack){
   const ext=extDe(nome);
   if(pack||!["pdf","png","jpg","jpeg","webp","gif"].includes(ext)){baixarArquivo(id,nome,pack);return}
@@ -1621,6 +1634,7 @@ async function verArquivo(id,nome,pack){
     }
     if(pdf.numPages>max)body.insertAdjacentHTML("beforeend",`<p class="muted" style="text-align:center">Mostrando ${max} de ${pdf.numPages} páginas. Baixe para ver o documento completo.</p>`);
   }catch(e){
+    if(e&&e.url){linkArquivo(e.url,nome);return}
     body.innerHTML=`<div class="empty"><strong>Não consegui mostrar o arquivo aqui</strong>Use “Baixar” para abrir no seu computador.</div>`;
   }
 }
@@ -2378,6 +2392,11 @@ db.settings({ignoreUndefinedProperties:true,merge:true});
     if(antes&&!semLixeiraN)registrar(this.path,"excluiu",antes,null);
   };
 })();
+if(firebase.storage){try{const st=firebase.storage();window.__storage=st;
+  const limpo=n=>String(n||"arquivo").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^\w.\-]+/g,"_").slice(-80);
+  assetsCap={upload:async(file,opts)=>{const path=`anexos/${new Date().getFullYear()}/${Date.now()}-${Math.random().toString(36).slice(2,8)}-${limpo(file.name)}`;
+    await st.ref(path).put(file,{contentType:file.type||(opts&&opts.type)||"application/octet-stream",customMetadata:{por:S.me||"",nome:file.name||""}});return {id:path}}};
+}catch(e){console.warn("storage",e)}}
 const prov=new firebase.auth.GoogleAuthProvider();prov.setCustomParameters({prompt:"select_account"});
 document.getElementById("gateBtn").onclick=async()=>{
   document.getElementById("gateErr").textContent="";
