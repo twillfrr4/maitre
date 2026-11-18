@@ -307,6 +307,10 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
 .gate-err{color:var(--danger,#b42318);font-size:13px;margin-top:12px;min-height:1em}
 .who-out{margin-left:6px}
 [hidden]{display:none!important}
+.avisos{margin-bottom:16px}.av{padding:12px 16px;border-top:1px solid var(--line)}
+.av-h{display:flex;gap:10px;align-items:flex-start}.av-i{font-size:18px;line-height:1.2}.av-t{flex:1;display:flex;flex-direction:column;gap:2px}.av-t .s{color:var(--muted);font-size:12.5px}
+.av-alta .av-t b{color:var(--bad)}.av-l{margin:6px 0 0 28px;display:flex;flex-direction:column;gap:4px}
+.av-r{display:flex;justify-content:space-between;gap:12px;font-size:13px}.av-r .s{color:var(--muted)}.av-x>span:first-child{color:var(--ink)}.av-r b{white-space:nowrap}
 .brand{text-align:center}.brand .logo{margin-inline:auto}
 .brand-n{font-family:"Cormorant Garamond",Georgia,serif;font-style:italic;font-weight:300;font-size:16px;line-height:1.2;letter-spacing:.01em;white-space:nowrap;margin-top:10px;color:var(--muted)}
 .gate-t{font-family:"Cormorant Garamond",Georgia,serif!important;font-style:italic;font-weight:300!important;font-size:24px!important;line-height:1.2;letter-spacing:0!important;margin:6px 0 2px!important}
@@ -490,6 +494,111 @@ function eff(it){ // data e valor efetivos para o fluxo
   if(it.status==="pago")return {d:it.pagoEm||it.vencimento,v:(it.valorPago??it.valor)||0,real:true};
   const t=todayISO();return {d:it.vencimento&&it.vencimento<t?t:it.vencimento,v:it.valor||0,real:false}; // atrasado ainda vai entrar/sair: conta a partir de hoje
 }
+/* ===== Alertas: mesmo código no sistema (quadro "Avisos de hoje") e no e-mail diário (Apps Script) ===== */
+function montarAlertas(D,hoje){
+  const cfg=D.config||{};
+  const addD=(iso,n)=>{const d=new Date(iso+"T12:00:00");d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)};
+  const brlA=c=>{const n=Math.round(c||0),neg=n<0,a=Math.abs(n),r=String(Math.floor(a/100)).replace(/\B(?=(\d{3})+(?!\d))/g,".");return (neg?"-":"")+"R$ "+r+","+String(a%100).padStart(2,"0")};
+  const dt=iso=>iso?iso.slice(8,10)+"/"+iso.slice(5,7):"";
+  const dias=(a,b)=>Math.round((new Date(b+"T12:00:00")-new Date(a+"T12:00:00"))/864e5);
+  const byId=(arr,id)=>(arr||[]).find(x=>x.id===id);
+  const cli=id=>{const c=byId(D.clientes,id);return c?c.nome:""};
+  const resp=id=>{const e=byId(D.equipe,id);return e?e.nome:""};
+  const aberto=x=>x.status!=="pago"&&x.status!=="cancelado";
+  const encargosA=x=>{const mp=Number(cfg.multaPct)||0,jm=Number(cfg.jurosMesPct)||0;const n=dias(x.vencimento,hoje);if(n<=0||(!mp&&!jm))return 0;
+    return Math.round((x.valor||0)*mp/100)+Math.round((x.valor||0)*jm/100/30*n)};
+  const soma=a=>a.reduce((s,x)=>s+(x.valor||0),0);
+  const PRI={1:"Máxima",2:"Média",3:"Baixa"};
+  const contrato=id=>byId(D.contratos,id);
+  const descR=x=>{const k=x.contratoId&&contrato(x.contratoId);return [cli(x.clienteId)||(k&&cli(k.clienteId)),k?k.evento:x.descricao].filter(Boolean).join(" · ")};
+  const G=[];const V={};const sec=(arr,o)=>{if(o.itens.length)arr.push(o)};
+  const R=(D.receber||[]).filter(aberto),P=(D.pagar||[]).filter(aberto);
+  const dow=new Date(hoje+"T12:00:00").getDay();const dia=Number(hoje.slice(8,10));
+
+  // 1. recebimentos
+  const rHoje=R.filter(x=>x.vencimento===hoje),rAtr=R.filter(x=>x.vencimento&&x.vencimento<hoje).sort((a,b)=>a.vencimento.localeCompare(b.vencimento));
+  sec(G,{id:"receber",icone:"💰",titulo:"Recebimentos",nivel:rAtr.length?"alta":"media",rota:"receber",
+    resumo:[rHoje.length&&`${rHoje.length} vence(m) hoje (${brlA(soma(rHoje))})`,rAtr.length&&`${rAtr.length} atrasado(s) (${brlA(soma(rAtr))})`].filter(Boolean).join(" · "),
+    itens:[...rHoje.map(x=>({t:`Hoje · ${descR(x)}`,v:brlA(x.valor),s:x.numero?"boleto "+x.numero:""})),
+           ...rAtr.map(x=>{const e=encargosA(x);return {t:`${dias(x.vencimento,hoje)} dia(s) de atraso · ${descR(x)}`,v:brlA(x.valor),s:(e?`atualizado ${brlA((x.valor||0)+e)}`:"")+(x.numero?(e?" · ":"")+"boleto "+x.numero:""),alerta:true}})]});
+  // 2. pagamentos
+  const pLim=addD(hoje,3);const pList=P.filter(x=>x.vencimento&&x.vencimento<=pLim).sort((a,b)=>(a.prioridade||3)-(b.prioridade||3)||a.vencimento.localeCompare(b.vencimento));
+  sec(G,{id:"pagar",icone:"💸",titulo:"Contas a pagar (atrasadas e próximos 3 dias)",nivel:pList.some(x=>x.vencimento<hoje||x.prioridade===1)?"alta":"media",rota:"pagar",
+    resumo:`${pList.length} conta(s) · ${brlA(soma(pList))}`+(pList.some(x=>x.prioridade===1)?` · ${pList.filter(x=>x.prioridade===1).length} de prioridade máxima`:""),
+    itens:pList.map(x=>({t:`${x.vencimento<hoje?"Atrasada desde "+dt(x.vencimento):x.vencimento===hoje?"Hoje":dt(x.vencimento)} · ${[x.fornecedor,x.descricao].filter(Boolean).join(" · ")}`,v:brlA(x.valor),s:"Prioridade "+(PRI[x.prioridade]||"Baixa"),alerta:x.prioridade===1||x.vencimento<hoje}))});
+  // 3. eventos em risco: nos próximos 30 dias com parcela em aberto
+  const ev=(D.contratos||[]).filter(c=>c.status!=="cancelado"&&c.dataEvento>=hoje&&c.dataEvento<=addD(hoje,30)).map(c=>({c,ab:R.filter(r=>r.contratoId===c.id)})).filter(o=>o.ab.length).sort((a,b)=>a.c.dataEvento.localeCompare(b.c.dataEvento));
+  sec(G,{id:"eventos",icone:"⚠️",titulo:"Eventos nos próximos 30 dias sem quitação",nivel:"alta",rota:"contratos",resumo:`${ev.length} evento(s) · falta receber ${brlA(ev.reduce((s,o)=>s+soma(o.ab),0))}`,
+    itens:ev.map(o=>({t:`${dt(o.c.dataEvento)} (em ${dias(hoje,o.c.dataEvento)} dia(s)) · ${o.c.evento} · ${cli(o.c.clienteId)}`,v:brlA(soma(o.ab)),s:o.ab.some(p=>p.vencimento<hoje)?"tem parcela atrasada":"parcela em aberto",alerta:dias(hoje,o.c.dataEvento)<=15}))});
+  // 4. caixa projetado
+  const saldoC=c=>{const d0=c.saldoData||"0000-00-00";let s=c.saldoInicial||0;
+    for(const x of D.receber||[])if(x.status==="pago"&&x.contaId===c.id&&(x.pagoEm||"")>d0)s+=(x.valorPago!=null?x.valorPago:x.valor)||0;
+    for(const x of D.pagar||[])if(x.status==="pago"&&x.contaId===c.id&&(x.pagoEm||"")>d0)s-=(x.valorPago!=null?x.valorPago:x.valor)||0;
+    for(const t of D.transf||[]){if((t.data||"")<=d0)continue;if(t.de===c.id)s-=t.valor||0;if(t.para===c.id)s+=t.valor||0}return s};
+  if((D.contas||[]).length){const t30=addD(hoje,30);const bancos=(D.contas||[]).filter(c=>!c.inativa).reduce((s,c)=>s+saldoC(c),0);
+    const proj=bancos+soma(R.filter(x=>x.vencimento<=t30))-soma(P.filter(x=>x.vencimento<=t30));
+    if(proj<0)G.push({id:"caixa",icone:"📉",titulo:"Caixa projetado negativo",nivel:"alta",rota:"painel",resumo:`Saldo previsto em 30 dias: ${brlA(proj)}`,
+      itens:[{t:`Bancos hoje ${brlA(bancos)} + a receber ${brlA(soma(R.filter(x=>x.vencimento<=t30)))} − a pagar ${brlA(soma(P.filter(x=>x.vencimento<=t30)))}`,v:brlA(proj),alerta:true}]})}
+  // 5. conciliação parada
+  const lim7=addD(hoje,-7);const pc={};
+  for(const e of D.extrato||[]){const cid=e.contaId||String(e.id||"").split("_")[0];const t=e.t||{};for(const k in t){const x=t[k];if((!x.st||x.st==="pendente")&&x.d&&x.d<lim7)pc[cid]=(pc[cid]||0)+1}}
+  sec(G,{id:"conciliacao",icone:"🏦",titulo:"Conciliação pendente há mais de 7 dias",nivel:"media",rota:"conciliacao",resumo:`${Object.values(pc).reduce((a,b)=>a+b,0)} movimento(s) do banco`,
+    itens:Object.keys(pc).map(cid=>({t:(byId(D.contas,cid)||{}).nome||"Banco",v:`${pc[cid]} movimento(s)`}))});
+  // 6. pedidos de acesso
+  const ped=(D.pedidos||[]).filter(p=>p.status==="pendente");
+  sec(G,{id:"pedidos",icone:"👤",titulo:"Pedidos de acesso",nivel:"media",rota:"orcamentos",resumo:`${ped.length} aguardando aprovação`,itens:ped.map(p=>({t:`${p.nome||p.id} · ${p.id}`,s:p.funcao||""}))});
+  // 7. alterações sensíveis (últimas 24h)
+  const desde=new Date(new Date(hoje+"T08:00:00").getTime()-864e5).toISOString();const nomeP=e=>{const u=(D.usuarios||[]).find(u=>u.id===e);return (u&&u.nome)||e||"alguém"};
+  const sens=(D.log||[]).filter(l=>(l.em||"")>=desde&&((l.acao==="excluiu"&&["contratos","receber","pagar","clientes"].includes(l.col))||(l.acao==="alterou"&&l.col==="contratos"&&(l.mudancas||[]).some(m=>m.c==="valor total"))||(l.acao==="alterou"&&l.col==="config"&&(l.mudancas||[]).some(m=>m.c==="fechado até"))));
+  const COLN={contratos:"contrato",receber:"parcela",pagar:"conta a pagar",clientes:"cliente",config:"fechamento"};
+  sec(G,{id:"sensivel",icone:"🔐",titulo:"Alterações sensíveis nas últimas 24h",nivel:"media",rota:"controle",resumo:`${sens.length} alteração(ões) para conferir`,
+    itens:sens.map(l=>({t:`${nomeP(l.por)} ${l.acao} ${COLN[l.col]||l.col} · ${l.resumo||""}`,s:(l.mudancas||[]).filter(m=>m.c==="valor total"||m.c==="fechado até").map(m=>`${m.c}: ${m.de} → ${m.para}`).join("")}))});
+  // 8. mês sem fechar
+  const mesAnt=addD(hoje.slice(0,7)+"-01",-1).slice(0,7);
+  if(dia>=10&&(cfg.fechadoAte||"")<mesAnt)G.push({id:"fechamento",icone:"📆",titulo:"Mês anterior ainda aberto",nivel:"media",rota:"controle",resumo:`Feche ${mesAnt.slice(5,7)}/${mesAnt.slice(0,4)} em Controle → Fechamento do mês`,itens:[{t:"Conferir conciliação e pendências, depois fechar o mês"}]});
+  // 9. segunda-feira: semana
+  if(dow===1){const fim=addD(hoje,6);const evs=(D.contratos||[]).filter(c=>c.status!=="cancelado"&&c.dataEvento>=hoje&&c.dataEvento<=fim);
+    const ent=R.filter(x=>x.vencimento>=hoje&&x.vencimento<=fim),sai=P.filter(x=>x.vencimento>=hoje&&x.vencimento<=fim);
+    G.push({id:"semana",icone:"📊",titulo:"Sua semana",nivel:"info",rota:"painel",resumo:`${evs.length} evento(s) · entradas previstas ${brlA(soma(ent))} · saídas previstas ${brlA(soma(sai))}`,
+      itens:evs.sort((a,b)=>a.dataEvento.localeCompare(b.dataEvento)).map(c=>({t:`${dt(c.dataEvento)} · ${c.evento} · ${cli(c.clienteId)}`,s:c.convidados?c.convidados+" convidados":""}))})}
+  // 10. início do mês: comissões e resultado do mês anterior
+  if(dia===1||(dia===2&&dow===1)){const mA=mesAnt;const pagos=a=>a.filter(x=>x.status==="pago"&&(x.pagoEm||"").startsWith(mA)).reduce((s,x)=>s+((x.valorPago!=null?x.valorPago:x.valor)||0),0);
+    const ent=pagos(D.receber||[]),sai=pagos(D.pagar||[]);const base=cfg.comissaoBase||"fechado";const com={};
+    const pct=eid=>{const e=byId(D.equipe,eid);return e&&e.comissaoPct!=null&&e.comissaoPct!==""?Number(e.comissaoPct):Number(cfg.comissaoPct)||0};
+    if(base==="recebido"){for(const p of D.receber||[])if(p.status==="pago"&&(p.pagoEm||"").startsWith(mA)&&p.contratoId){const c=contrato(p.contratoId);if(c&&c.responsavelId)com[c.responsavelId]=(com[c.responsavelId]||0)+((p.valorPago!=null?p.valorPago:p.valor)||0)}}
+    else for(const c of D.contratos||[])if(c.status!=="cancelado"&&(c.dataAssinatura||"").startsWith(mA)&&c.responsavelId)com[c.responsavelId]=(com[c.responsavelId]||0)+(c.valorTotal||0);
+    G.push({id:"mes",icone:"🗓️",titulo:`Fechamento de ${mA.slice(5,7)}/${mA.slice(0,4)}`,nivel:"info",rota:"resultados",resumo:`Recebido ${brlA(ent)} · pago ${brlA(sai)} · resultado ${brlA(ent-sai)}`,
+      itens:Object.keys(com).map(eid=>({t:`Comissão · ${resp(eid)} (${String(pct(eid)).replace(".",",")}%)`,v:brlA(Math.round(com[eid]*pct(eid)/100))}))})}
+
+  // ---------- por vendedor ----------
+  const donoDe=x=>x.responsavelId||(String(x._o||"").startsWith("eq-")?String(x._o).slice(3):"");
+  for(const e of D.equipe||[]){if(e.ativo===false)continue;const L=[];
+    const orc=(D.orcamentos||[]).filter(o=>donoDe(o)===e.id&&["aberto","enviado","negociacao"].includes(o.status));
+    const ret=orc.filter(o=>o.proximoContato&&o.proximoContato<=hoje);
+    sec(L,{id:"retornos",icone:"📞",titulo:"Retornos de orçamento para hoje",nivel:"alta",rota:"orcamentos",resumo:`${ret.length} cliente(s) para contatar`,
+      itens:ret.map(o=>({t:`${o.numero||""} · ${o.contatoNome||cli(o.clienteId)||""}${o.evento?" · "+o.evento:""}`,v:o.valor?brlA(o.valor):"",s:[o.contatoTelefone||(cli(o.clienteId)&&(byId(D.clientes,o.clienteId)||{}).telefone),o.proximoContato<hoje?"retorno atrasado desde "+dt(o.proximoContato):""].filter(Boolean).join(" · "),alerta:o.proximoContato<hoje}))});
+    const par=orc.filter(o=>o.status==="enviado"&&!(o.proximoContato&&o.proximoContato>=hoje)&&((o.atualizadoEm||o.criadoEm||"").slice(0,10)||o.data||hoje)<=addD(hoje,-7)&&!ret.includes(o));
+    sec(L,{id:"parados",icone:"💤",titulo:"Orçamentos parados há 7 dias ou mais",nivel:"media",rota:"orcamentos",resumo:`${par.length} sem novidade`,
+      itens:par.map(o=>({t:`${o.numero||""} · ${o.contatoNome||cli(o.clienteId)||""}${o.evento?" · "+o.evento:""}`,v:o.valor?brlA(o.valor):""}))});
+    const evv=(D.contratos||[]).filter(c=>donoDe(c)===e.id&&c.status!=="cancelado"&&c.dataEvento>=hoje&&c.dataEvento<=addD(hoje,15)).map(c=>({c,ab:R.filter(r=>r.contratoId===c.id)})).filter(o=>o.ab.length);
+    sec(L,{id:"eventosv",icone:"📅",titulo:"Eventos dos seus clientes com parcela em aberto",nivel:"alta",rota:"contratos",resumo:`${evv.length} evento(s) nos próximos 15 dias`,
+      itens:evv.map(o=>({t:`${dt(o.c.dataEvento)} · ${o.c.evento} · ${cli(o.c.clienteId)}`,v:brlA(soma(o.ab)),alerta:true}))});
+    if(L.length)V[e.id]=L;
+  }
+  return {gestao:G,vendedores:V};
+}
+
+function dadosAlertas(){return {receber:S.receber,pagar:S.pagar,contratos:S.contratos,orcamentos:S.orcamentos,clientes:S.clientes,equipe:S.equipe,contas:S.contas,transf:S.transf,extrato:S.extrato,pedidos:S.pedidos,log:S.log,usuarios:S.usuarios,config:S.config}}
+function quadroAvisos(){
+  const A=montarAlertas(dadosAlertas(),todayISO());
+  const L=ADMIN()?A.gestao:(A.vendedores[meuEquipeId()]||[]);
+  if(!L.length)return `<section class="panel avisos"><div class="panel-h"><h2>Avisos de hoje</h2></div><div class="empty" style="padding:18px"><strong>Tudo em dia ✓</strong>Nenhum vencimento, atraso ou retorno pendente.</div></section>`;
+  const aberto=UI.avx||{};
+  return `<section class="panel avisos"><div class="panel-h"><h2>Avisos de hoje</h2><span class="s muted" style="font-size:12px">${L.length} assunto(s)</span></div>
+  ${L.map(g=>{const open=aberto[g.id];const it=open?g.itens:g.itens.slice(0,3);return `<div class="av av-${g.nivel}"><div class="av-h"><span class="av-i">${g.icone}</span><div class="av-t"><b>${esc(g.titulo)}</b><span class="s">${esc(g.resumo||"")}</span></div><a class="btn sm ghost" href="#${g.rota}">Abrir</a></div>
+   <div class="av-l">${it.map(i=>`<div class="av-r${i.alerta?" av-x":""}"><span>${esc(i.t)}${i.s?`<span class="s"> · ${esc(i.s)}</span>`:""}</span>${i.v?`<b class="num">${esc(i.v)}</b>`:""}</div>`).join("")}
+   ${g.itens.length>3?`<button class="lnk s" data-a="avx" data-v="${g.id}">${open?"mostrar menos":`ver mais ${g.itens.length-3}`}</button>`:""}</div></div>`}).join("")}</section>`;
+}
 function vPainel(){
   const t=todayISO(),t30=addDays(t,30);
   const rec=S.receber.filter(x=>x.status!=="cancelado"),pag=S.pagar.filter(x=>x.status!=="cancelado");
@@ -527,6 +636,7 @@ function vPainel(){
    <div class="kpi ${atr.length?"bad":""}"><span class="lbl">Recebimentos atrasados</span><span class="val">${brl(sum(atr))}</span><span class="det">${atr.length} parcela(s) de clientes</span></div>
    <div class="kpi ${atrP.length?"bad":""}"><span class="lbl">Contas atrasadas</span><span class="val">${brl(sum(atrP))}</span><span class="det">${atrP.length} conta(s) a pagar${atrP.some(x=>x.prioridade===1)?` · ${atrP.filter(x=>x.prioridade===1).length} de prioridade máxima`:""}</span></div>
   </div>
+  ${quadroAvisos()}
   ${bancosResumo()}
   <section class="panel chart"><div class="panel-h"><div><h2>Fluxo de caixa</h2><div class="s muted" style="font-size:12px">Mês atual: recebido ${brl(recMes)} · pago ${brl(pagMes)}</div></div>
    <div class="legend"><span><i style="background:var(--accent)"></i>Entradas realizadas</span><span><i style="background:var(--accent);opacity:.35"></i>Entradas previstas</span><span><i style="background:var(--out)"></i>Saídas realizadas</span><span><i style="background:var(--out);opacity:.35"></i>Saídas previstas</span></div></div>
@@ -550,7 +660,8 @@ function vPainelComercial(){
    <div class="kpi good"><span class="lbl">Fechados no mês</span><span class="val">${brl(sum(fechMes,"valorTotal"))}</span><span class="det">${fechMes.length} contrato(s)</span></div>
    <div class="kpi ${atr.length?"bad":""}"><span class="lbl">Parcelas atrasadas</span><span class="val">${atr.length}</span><span class="det">${brl(sum(atr,"valor"))} dos seus clientes</span></div>
   </div>
-  <div class="grid2" style="margin-top:0">
+  ${quadroAvisos()}
+  <div class="grid2">
    <section class="panel"><div class="panel-h"><h2>Retornar hoje</h2><a href="#orcamentos" class="s" style="font-size:13px">Ver orçamentos</a></div>${ret.length?`<div class="tbl-wrap"><table><tbody>${ret.map(o=>`<tr class="is-warn"><td><div class="t">${esc(orcNome(o))}</div><div class="s">${esc([o.tipo,o.evento].filter(Boolean).join(" · "))} · ${o.contatoTelefone?esc(o.contatoTelefone):""}</div></td><td class="r num">${brl(o.valor)}</td><td class="r"><button class="btn sm" data-a="orc-edit" data-id="${o.id}">Abrir</button></td></tr>`).join("")}</tbody></table></div>`:`<div class="empty"><strong>Nenhum retorno pendente</strong>Use o campo “Próximo contato” nos orçamentos para ser lembrado aqui.</div>`}</section>
    <section class="panel"><div class="panel-h"><h2>Seus próximos eventos</h2><a href="#contratos" class="s" style="font-size:13px">Ver contratos</a></div>${evts.length?evts.map(c=>{const [y,m,d]=c.dataEvento.split("-");const ps=S.receber.filter(r=>r.contratoId===c.id);const q=ps.find(p=>p.tipo==="quitacao");return `<div class="evt"><div class="d"><b>${d}</b><span>${MES[m-1]}</span></div><div class="i"><div class="t">${esc(c.evento)}</div><div class="s muted">${esc(clienteNome(c.clienteId))}</div></div>${q?`<span class="s muted">Quitação ${pill(status(q))}</span>`:""}</div>`}).join(""):`<div class="empty"><strong>Nenhum evento futuro</strong></div>`}</section>
   </div>`;
@@ -2031,6 +2142,7 @@ function vControle(){
     return head("Regras usadas nos cálculos do sistema.",W()?`<button class="btn primary" data-a="cfg-geral">Editar</button>`:"")+`<section class="panel"><div class="panel-b">
       <p><b>Multa por atraso:</b> ${pctTxt(Number(c.multaPct)||0)} · <b>Juros:</b> ${pctTxt(Number(c.jurosMesPct)||0)} ao mês (proporcional aos dias)</p>
       <p><b>Comissão padrão:</b> ${pctTxt(Number(c.comissaoPct)||0)} · <b>Base:</b> ${(c.comissaoBase||"fechado")==="recebido"?"valores recebidos no mês":"contratos assinados no mês"}</p>
+      <p><b>E-mail diário (8h, seg. a sáb.):</b> gestão ${c.alertaGestao===false?"desligado":"ligado"} · vendedores ${c.alertaVendedores===false?"desligado":"ligado"}</p>
       <p class="muted s">A multa e os juros aparecem em “A receber” nas parcelas atrasadas e entram automaticamente na mensagem de cobrança.</p></div></section>`;
   }
   // fechamento
@@ -2064,9 +2176,11 @@ function formConfigGeral(){
   const c=S.config;const v=n=>String(Number(n)||0).replace(".",",");
   openDlg("Configurações",F("multaPct","Multa por atraso (%)",v(c.multaPct),{attrs:'inputmode="decimal"',hint:"Comum: 2%"})+F("jurosMesPct","Juros ao mês (%)",v(c.jurosMesPct),{attrs:'inputmode="decimal"',hint:"Comum: 1% ao mês, proporcional aos dias"})+
    F("comissaoPct","Comissão padrão (%)",v(c.comissaoPct),{attrs:'inputmode="decimal"',hint:"Vale para quem não tiver percentual próprio"})+
-   SEL("comissaoBase","Comissão calculada sobre",[["fechado","Contratos assinados no mês"],["recebido","Valores recebidos no mês"]],c.comissaoBase||"fechado"),
+   SEL("comissaoBase","Comissão calculada sobre",[["fechado","Contratos assinados no mês"],["recebido","Valores recebidos no mês"]],c.comissaoBase||"fechado")+
+   SEL("alertaGestao","E-mail diário para a gestão",[["sim","Enviar"],["nao","Não enviar"]],c.alertaGestao===false?"nao":"sim")+
+   SEL("alertaVendedores","E-mail diário para cada vendedor",[["sim","Enviar"],["nao","Não enviar"]],c.alertaVendedores===false?"nao":"sim"),
    {onSubmit:async fd=>{const n=k=>{const x=Number(String(fd.get(k)||"0").replace(",","."));need(!isNaN(x)&&x>=0&&x<=100,"Percentual inválido.");return x};
-     const o={multaPct:n("multaPct"),jurosMesPct:n("jurosMesPct"),comissaoPct:n("comissaoPct"),comissaoBase:String(fd.get("comissaoBase"))};
+     const o={multaPct:n("multaPct"),jurosMesPct:n("jurosMesPct"),comissaoPct:n("comissaoPct"),comissaoBase:String(fd.get("comissaoBase")),alertaGestao:fd.get("alertaGestao")!=="nao",alertaVendedores:fd.get("alertaVendedores")!=="nao"};
      need(o.multaPct<=2,"Pelo Código de Defesa do Consumidor, a multa por atraso não pode passar de 2%.");
      await write(()=>db.doc("config/geral").set({...S.config,...o,...stamp()}));toast("Configurações salvas")}});
 }
@@ -2294,6 +2408,7 @@ document.addEventListener("click",ev=>{
     case "dm":UI.dm=v;render();break;
     case "dre-csv":exportDRE();break;
     case "cb":UI.cb=v;render();break;
+    case "avx":UI.avx={...(UI.avx||{}),[v]:!(UI.avx||{})[v]};render();break;
     case "com-csv":exportComissoes();break;
     case "cv":UI.cv=v;render();break;
     case "lix-rest":restaurarLote(b.dataset.g);break;
