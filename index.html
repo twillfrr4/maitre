@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
-<title>Maître · Bosco</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%228%22 fill=%22%231f4d3a%22/%3E%3Ctext x=%2216%22 y=%2222%22 font-size=%2218%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Georgia%22%3EM%3C/text%3E%3C/svg%3E">
+<title>Bosco · Gestão comercial e financeira</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%228%22 fill=%22%231f4d3a%22/%3E%3Ctext x=%2216%22 y=%2222%22 font-size=%2218%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Georgia%22%3EB%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,300;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
 /* Layout: barra lateral fixa (vira abas no celular) + área de trabalho com cartões de resumo, gráfico de fluxo e tabelas operacionais */
 :root{
@@ -306,6 +306,9 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
 .gate-card .btn{width:100%;justify-content:center;gap:10px}
 .gate-err{color:var(--danger,#b42318);font-size:13px;margin-top:12px;min-height:1em}
 .who-out{margin-left:6px}
+.brand-n{font-family:"Cormorant Garamond",Georgia,serif;font-style:italic;font-weight:300;font-size:25px;line-height:1.08;letter-spacing:0;margin-top:12px;color:var(--ink)}
+.gate-t{font-family:"Cormorant Garamond",Georgia,serif!important;font-style:italic;font-weight:300!important;font-size:30px!important;line-height:1.1;letter-spacing:0!important;margin:6px 0 2px!important}
+@media (max-width:760px){.brand-n{display:none}}
 .gate-form{display:grid;gap:10px;text-align:left;margin:4px 0 6px}
 .gate-form label{font-size:12px;font-weight:600;color:var(--muted)}
 .gate-form input{width:100%;box-sizing:border-box;margin-top:4px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:inherit;font:inherit}
@@ -317,7 +320,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
 <body>
 <div class="gate" id="gate"><div class="gate-card">
   <span class="logo" role="img" aria-label="Bosco"></span>
-  <h1>Maître</h1><p id="gateMsg">Gestão financeira e comercial da Bosco.<br>Entre com a conta Google que o financeiro cadastrou para você.</p>
+  <h1 class="gate-t">Gestão comercial<br>e financeira</h1><p id="gateMsg">Entre com a sua conta Google para acessar.</p>
   <button class="btn primary" id="gateBtn" type="button"><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg><span id="gateBtnTxt">Entrar com Google</span></button>
   <form class="gate-form" id="gateReq" style="display:none" autocomplete="on">
     <label>Seu nome<input name="nome" required maxlength="80" autocomplete="name"></label>
@@ -331,7 +334,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
 
 <div class="app">
   <aside class="side">
-    <div class="brand"><span class="logo" role="img" aria-label="Bosco"></span><span class="brand-n">Maître</span><small>Gestão financeira e comercial</small></div>
+    <div class="brand"><span class="logo" role="img" aria-label="Bosco"></span><span class="brand-n">Gestão comercial<br>e financeira</span></div>
     <nav class="nav" id="nav"></nav>
     <button class="btn sm ghost tema-m" data-a="tema" aria-label="Escolher tema">Tema</button>
     <div class="side-foot"><div id="who"></div><button class="tema-btn" data-a="tema" id="temaBtn"><span class="tema-dot"></span><span id="temaNome">Tema</span></button><button class="lnk" id="bkBtn" data-a="backup" hidden>Baixar backup completo</button><br><button class="lnk" id="impBtn" data-a="importar" hidden>Importar backup</button><input type="file" id="impIn" accept=".json,application/json" hidden></div>
@@ -436,14 +439,14 @@ window.addEventListener("hashchange",render);
 /* ---------- render ---------- */
 async function baixarBackup(){
   const limpo=arr=>arr.map(x=>{const {_t,...r}=x;return r});
-  const dados={sistema:"Maître · Bosco",versao:1,geradoEm:new Date().toISOString(),
+  const dados={sistema:"Bosco · Gestão comercial e financeira",versao:1,geradoEm:new Date().toISOString(),
     observacao:"Cada registro traz o campo _c com o caminho da coleção de origem e id com o identificador.",
     colecoes:{}};
   for(const c of ["clientes","contratos","receber","orcamentos","pagar","contas","transf","extrato","equipe","usuarios","donos"])dados.colecoes[c]=limpo(S[c]||[]);
   dados.config=S.config;dados.contadores=S.cont;
   const n=Object.values(dados.colecoes).reduce((a,b)=>a+b.length,0);
   if(!dlCap){toast("Download indisponível nesta visualização");return}
-  try{await dlCap.save({filename:`backup-maitre-${todayISO()}.json`,data:new Blob([JSON.stringify(dados,null,1)],{type:"application/json"})});toast(`Backup com ${n} registro(s) salvo`)}
+  try{await dlCap.save({filename:`backup-bosco-gestao-${todayISO()}.json`,data:new Blob([JSON.stringify(dados,null,1)],{type:"application/json"})});toast(`Backup com ${n} registro(s) salvo`)}
   catch(e){if(e&&e.code!=="declined")toast("Não foi possível gerar o backup ("+(e.code||"erro")+")")}
 }
 function renderNav(){
@@ -2108,8 +2111,8 @@ function resolveNames(){}
 /* ---------- importar backup do sistema antigo ---------- */
 document.getElementById("impIn").addEventListener("change",async ev=>{
   const file=ev.target.files&&ev.target.files[0];ev.target.value="";if(!file)return;
-  let j;try{j=JSON.parse(await file.text())}catch(e){toast("Arquivo inválido: não é um backup do Maître");return}
-  if(!j||!j.colecoes){toast("Arquivo inválido: não é um backup do Maître");return}
+  let j;try{j=JSON.parse(await file.text())}catch(e){toast("Arquivo inválido: não é um backup do sistema");return}
+  if(!j||!j.colecoes){toast("Arquivo inválido: não é um backup do sistema");return}
   const C=j.colecoes;const total=Object.values(C).reduce((a,b)=>a+(b||[]).length,0);
   if(!confirm(`Importar ${total} registro(s) deste backup?\n\nRegistros com o mesmo identificador serão substituídos. Faça isso uma vez só, logo após a mudança.`))return;
   const eqDeUid={};for(const v of (C.vinculos||[]))if(v.id&&v.equipeId)eqDeUid[v.id]=v.equipeId;
@@ -2157,9 +2160,9 @@ async function pedirAcesso(u,email){
   const ref=db.doc("pedidos/"+email);
   db.doc("usuarios/"+email).onSnapshot(s=>{if(s.exists)location.reload()},()=>{});
   const mostrar=p=>{
-    if(p&&p.status==="pendente")porta(`${ola} Seu pedido de acesso foi enviado em ${esc(fmtD((p.em||"").slice(0,10)))}.<br>Assim que o financeiro aprovar, o Maître abre sozinho nesta tela.`,{trocar:true,botao:false});
+    if(p&&p.status==="pendente")porta(`${ola} Seu pedido de acesso foi enviado em ${esc(fmtD((p.em||"").slice(0,10)))}.<br>Assim que o financeiro aprovar, o sistema abre sozinho nesta tela.`,{trocar:true,botao:false});
     else if(p&&p.status==="recusado")porta(`${ola} Seu pedido de acesso com <b>${esc(email)}</b> não foi aprovado.<br>Se for um engano, fale com o financeiro.`,{trocar:true,botao:false});
-    else{porta(`${ola} Para usar o Maître com <b>${esc(email)}</b>, preencha e envie o pedido. O financeiro vai aprovar e definir o que você pode ver.`,{trocar:true,botao:false,form:true});
+    else{porta(`${ola} Para usar o sistema com <b>${esc(email)}</b>, preencha e envie o pedido. O financeiro vai aprovar e definir o que você pode ver.`,{trocar:true,botao:false,form:true});
       const f=document.getElementById("gateReq");if(!f.nome.value)f.nome.value=u.displayName||""}
   };
   let p=null;try{const s=await ref.get();p=s.exists?s.data():null}catch(e){}

@@ -1,4 +1,4 @@
-# Maître
+# Bosco · Gestão comercial e financeira
 
 Sistema financeiro e comercial interno da Bosco Gastronomia e Eventos.
 
