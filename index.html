@@ -297,7 +297,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
   .search{width:100%}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
-.gate{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:16px;background:var(--bg)}
+.gate{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:16px;background:var(--bg);overflow-y:auto}
 .gate[hidden]{display:none}
 .gate-card{width:min(400px,100%);background:var(--panel,var(--bg));border:1px solid var(--line);border-radius:14px;padding:28px 24px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.06)}
 .gate-card .logo{margin:0 auto 10px}
@@ -306,6 +306,12 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
 .gate-card .btn{width:100%;justify-content:center;gap:10px}
 .gate-err{color:var(--danger,#b42318);font-size:13px;margin-top:12px;min-height:1em}
 .who-out{margin-left:6px}
+.gate-form{display:grid;gap:10px;text-align:left;margin:4px 0 6px}
+.gate-form label{font-size:12px;font-weight:600;color:var(--muted)}
+.gate-form input{width:100%;box-sizing:border-box;margin-top:4px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:inherit;font:inherit}
+.ped-row{display:grid;gap:8px;padding:10px 0;border-bottom:1px solid var(--line)}
+.ped-row .ped-op{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ped-row select{max-width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:inherit;font:inherit;font-size:13px}
 </style>
 </head>
 <body>
@@ -313,6 +319,12 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
   <span class="logo" role="img" aria-label="Bosco"></span>
   <h1>Maître</h1><p id="gateMsg">Gestão financeira e comercial da Bosco.<br>Entre com a conta Google que o financeiro cadastrou para você.</p>
   <button class="btn primary" id="gateBtn" type="button"><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg><span id="gateBtnTxt">Entrar com Google</span></button>
+  <form class="gate-form" id="gateReq" style="display:none" autocomplete="on">
+    <label>Seu nome<input name="nome" required maxlength="80" autocomplete="name"></label>
+    <label>Telefone / WhatsApp<input name="telefone" maxlength="30" autocomplete="tel" inputmode="tel"></label>
+    <label>Função na Bosco<input name="funcao" maxlength="60" placeholder="Ex.: Vendas, Financeiro"></label>
+    <button class="btn primary" type="submit">Solicitar acesso</button>
+  </form>
   <button class="btn ghost" id="gateOut" type="button" style="margin-top:8px;display:none">Entrar com outra conta</button>
   <div class="gate-err" id="gateErr" role="alert"></div>
 </div></div>
@@ -337,7 +349,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
 "use strict";
 /* ---------- estado ---------- */
 const COLS=["clientes","contratos","receber","pagar","extrato","contas","transf","orcamentos","equipe"];
-const S={clientes:[],contratos:[],receber:[],pagar:[],extrato:[],contas:[],transf:[],orcamentos:[],equipe:[],vinculos:[],usuarios:[],perfil:null,donos:[],donosOk:new Set(),cont:{},role:"",avisoLimite:false,sel:new Set(),config:{},loaded:{},me:null,names:{},canWrite:true,dbState:"connecting",dbError:""};
+const S={clientes:[],contratos:[],receber:[],pagar:[],extrato:[],contas:[],transf:[],orcamentos:[],equipe:[],vinculos:[],usuarios:[],pedidos:[],perfil:null,donos:[],donosOk:new Set(),cont:{},role:"",avisoLimite:false,sel:new Set(),config:{},loaded:{},me:null,names:{},canWrite:true,dbState:"connecting",dbError:""};
 const UI={rf:"abertos",rq:"",pf:"abertos",pq:"",cf:"proximos",cq:"",kq:"",xf:"pendentes",xt:"todas",xm:"",xq:"",xlim:150,xb:"",rb:"",pb:"",pp:"",ps:"venc",of:"abertos",oq:"",or:"",ov:"lista",op:"3m",cr:"",rp:"ano",rs:"data",rc:false,rv:"eventos",dm:"realizado",dy:0};
 let db=null,userCap=null,assetsCap=null,dlCap=null;
 
@@ -449,6 +461,8 @@ function banner(){
   if(S.dbState==="off")return `<div class="banner"><b>Sem conexão com o banco de dados.</b> Verifique a internet e recarregue a página. ${esc(S.dbError)}</div>`;
   if(ADMIN()&&legado())return `<div class="banner"><b>Atualização de segurança:</b> ${legado()} registro(s) de orçamentos, contratos, clientes e parcelas precisam ser organizados por responsável para que cada vendedor veja só os seus. <button class="btn sm primary" data-a="migrar">Organizar agora</button></div>`;
   if(S.avisoLimite)return `<div class="banner">Há vendedores demais para acompanhar ao mesmo tempo; alguns registros podem não aparecer. Recarregue a página.</div>`;
+  const np=ADMIN()?S.pedidos.filter(p=>p.status==="pendente").length:0;
+  if(np)return `<div class="banner"><b>${np} pedido(s) de acesso</b> aguardando sua aprovação. <button class="btn sm primary" data-a="equipe">Ver pedidos</button></div>`;
   if(!S.canWrite)return `<div class="banner">Você tem acesso só de leitura. Peça ao financeiro para liberar seu acesso.</div>`;
   return "";
 }
@@ -1779,7 +1793,13 @@ function formEquipe(){
        <span class="s" style="display:block">${u?`${esc(u.id)} · ${PERFIL_N[u.perfil]||u.perfil}`:"sem acesso ao sistema"}${n?` · ${n} registro(s)`:""}</span></span>
        <span class="row-act">${u?`<button type="button" class="btn sm ghost" data-acdel="${esc(u.id)}">Tirar acesso</button>`:""}<button type="button" class="btn sm ghost" data-eq="${e.id}">${e.ativo===false?"Reativar":"Desativar"}</button></span></div>`}).join("");
     const ges=S.usuarios.filter(u=>!u.equipeId).sort((a,b)=>a.id.localeCompare(b.id)).map(u=>`<div class="eq-row"><span><b>${esc(u.nome||u.id)}</b> <span class="muted">· Gestão</span><span class="s" style="display:block">${esc(u.id)}</span></span><span class="row-act"><button type="button" class="btn sm ghost" data-acdel="${esc(u.id)}">Tirar acesso</button></span></div>`).join("");
-    return `<span class="lbl-like">Equipe comercial</span>${eq||`<span class="muted">Ninguém cadastrado ainda.</span>`}${ges?`<span class="lbl-like" style="margin-top:12px;display:block">Gestão (sem carteira de vendas)</span>${ges}`:""}<p class="muted s" style="margin-top:8px">financeiro${dom} sempre tem acesso de gestão.</p>`;
+    const pend=S.pedidos.filter(p=>p.status==="pendente").sort((a,b)=>(a.em||"").localeCompare(b.em||""));
+    const livres=equipeOrd().filter(e=>!acessoDe(e.id));
+    const ped=pend.map(p=>`<div class="ped-row" data-ped="${esc(p.id)}"><span><b>${esc(p.nome||p.id)}</b>${p.funcao?` <span class="muted">· ${esc(p.funcao)}</span>`:""}<span class="s" style="display:block">${esc(p.id)}${p.telefone?` · ${esc(p.telefone)}`:""} · pediu em ${esc(fmtD((p.em||"").slice(0,10)))}</span></span>
+       <span class="ped-op"><select data-k="perfil" aria-label="Perfil"><option value="comercial">Comercial (vê só o que é dele)</option><option value="gestao">Gestão (vê tudo)</option><option value="gestao-so">Gestão, sem carteira de vendas</option></select>
+       <select data-k="vinc" aria-label="Pessoa da equipe"><option value="">Cadastrar como pessoa nova</option>${livres.map(e=>`<option value="${e.id}">É o(a) ${esc(e.nome)}</option>`).join("")}</select>
+       <button type="button" class="btn sm primary" data-aprova="${esc(p.id)}">Aprovar</button><button type="button" class="btn sm ghost" data-recusa="${esc(p.id)}">Recusar</button></span></div>`).join("");
+    return `${pend.length?`<span class="lbl-like">Pedidos de acesso (${pend.length})</span>${ped}<div style="height:12px"></div>`:""}<span class="lbl-like">Equipe comercial</span>${eq||`<span class="muted">Ninguém cadastrado ainda.</span>`}${ges?`<span class="lbl-like" style="margin-top:12px;display:block">Gestão (sem carteira de vendas)</span>${ges}`:""}<p class="muted s" style="margin-top:8px">financeiro${dom} sempre tem acesso de gestão.</p>`;
   };
   const semAcesso=equipeOrd().filter(e=>!acessoDe(e.id));
   openDlg("Equipe e acessos",`<div class="fld full eq-list" id="eqList">${lista()}</div>`
@@ -1790,8 +1810,26 @@ function formEquipe(){
    {submit:"Salvar",onOpen:f=>{
       const q=$n(f,"quem");const sync=()=>{const nova=!q.value;for(const k of ["nome","funcao"])$n(f,k).closest(".fld").style.display=(!nova||($n(f,"perfil").value==="gestao-so"&&k==="funcao"))?"none":""};
       q.addEventListener("change",sync);$n(f,"perfil").addEventListener("change",sync);sync();
-      f.querySelector("#eqList").addEventListener("click",async ev=>{
+      const lst=f.querySelector("#eqList");lst._redraw=()=>{lst.innerHTML=lista()};
+      lst.addEventListener("click",async ev=>{
       const redraw=()=>setTimeout(()=>{const l=document.getElementById("eqList");if(l)l.innerHTML=lista()},450);
+      const ap=ev.target.closest("[data-aprova]"),rc=ev.target.closest("[data-recusa]");
+      if(ap||rc){const em=(ap||rc).dataset[ap?"aprova":"recusa"];const p=S.pedidos.find(x=>x.id===em);if(!p)return;
+        const row=(ap||rc).closest(".ped-row");(ap||rc).disabled=true;
+        try{
+          if(rc){await write(()=>db.doc("pedidos/"+em).set({status:"recusado",por:S.me,decididoEm:new Date().toISOString()},{merge:true}));toast("Pedido recusado: "+em);redraw();return}
+          need(!S.usuarios.some(u=>u.id===em),"Esse e-mail já tem acesso.");
+          const perfil=row.querySelector('[data-k="perfil"]').value,vinc=row.querySelector('[data-k="vinc"]').value;
+          const nome=p.nome||em.split("@")[0];const base={criadoEm:new Date().toISOString(),criadoPor:S.me,telefone:p.telefone||""};
+          if(perfil==="gestao-so")await write(()=>db.doc("usuarios/"+em).set({...base,nome,perfil:"gestao",equipeId:""}));
+          else{let eid=vinc,nm=nome;
+            if(!eid){const ref=db.collection("equipe").doc();eid=ref.id;await write(()=>ref.set({nome,funcao:p.funcao||"",telefone:p.telefone||"",ativo:true,criadoEm:new Date().toISOString()}))}
+            else nm=respNome(eid);
+            await write(()=>db.doc("usuarios/"+em).set({...base,nome:nm,perfil,equipeId:eid}))}
+          await write(()=>db.doc("pedidos/"+em).delete());
+          toast(`${nome}: acesso aprovado`);redraw();
+        }catch(er){showErr(er.message);(ap||rc).disabled=false}
+        return}
       const ad=ev.target.closest("[data-acdel]");if(ad){const em=ad.dataset.acdel;if(em===S.me){showErr("Você não pode tirar o próprio acesso.");return}
         try{await write(()=>db.doc("usuarios/"+em).delete());toast("Acesso removido: "+em);redraw()}catch(er){showErr(er.message)}return}
       const b=ev.target.closest("[data-eq]");if(!b)return;const e=byId(S.equipe,b.dataset.eq);
@@ -2096,7 +2134,7 @@ document.getElementById("impIn").addEventListener("change",async ev=>{
 const FIREBASE={apiKey:"AIzaSyArKUT2VkCls2GvQBWJklxKejZGmwYaF00",authDomain:"maitre-bosco.firebaseapp.com",projectId:"maitre-bosco",storageBucket:"maitre-bosco.firebasestorage.app",messagingSenderId:"766421664298",appId:"1:766421664298:web:80d63dad1c409e46807953"};
 const DOMINIO="boscoeventos.com.br",FIN="financeiro@"+DOMINIO;
 const gate=document.getElementById("gate");
-function porta(msg,{erro="",trocar=false,botao=true}={}){gate.hidden=false;document.getElementById("gateMsg").innerHTML=msg;document.getElementById("gateErr").textContent=erro;document.getElementById("gateBtn").style.display=botao?"":"none";document.getElementById("gateOut").style.display=trocar?"":"none"}
+function porta(msg,{erro="",trocar=false,botao=true,form=false}={}){gate.hidden=false;document.getElementById("gateReq").style.display=form?"":"none";document.getElementById("gateMsg").innerHTML=msg;document.getElementById("gateErr").textContent=erro;document.getElementById("gateBtn").style.display=botao?"":"none";document.getElementById("gateOut").style.display=trocar?"":"none"}
 const MSG0=document.getElementById("gateMsg").innerHTML;
 dlCap={save:async({filename,data})=>{const u=URL.createObjectURL(data);const a=document.createElement("a");a.href=u;a.download=filename||"arquivo";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000)}};
 if(!window.firebase){porta("Não foi possível carregar o sistema.",{erro:"Verifique a internet e recarregue a página.",botao:false});return}
@@ -2114,6 +2152,24 @@ document.getElementById("gateBtn").onclick=async()=>{
   }};
 document.getElementById("gateOut").onclick=()=>auth.signOut();
 let iniciado=false;
+async function pedirAcesso(u,email){
+  const ola=`Olá${u.displayName?", "+esc(u.displayName.split(" ")[0]):""}.`;
+  const ref=db.doc("pedidos/"+email);
+  db.doc("usuarios/"+email).onSnapshot(s=>{if(s.exists)location.reload()},()=>{});
+  const mostrar=p=>{
+    if(p&&p.status==="pendente")porta(`${ola} Seu pedido de acesso foi enviado em ${esc(fmtD((p.em||"").slice(0,10)))}.<br>Assim que o financeiro aprovar, o Maître abre sozinho nesta tela.`,{trocar:true,botao:false});
+    else if(p&&p.status==="recusado")porta(`${ola} Seu pedido de acesso com <b>${esc(email)}</b> não foi aprovado.<br>Se for um engano, fale com o financeiro.`,{trocar:true,botao:false});
+    else{porta(`${ola} Para usar o Maître com <b>${esc(email)}</b>, preencha e envie o pedido. O financeiro vai aprovar e definir o que você pode ver.`,{trocar:true,botao:false,form:true});
+      const f=document.getElementById("gateReq");if(!f.nome.value)f.nome.value=u.displayName||""}
+  };
+  let p=null;try{const s=await ref.get();p=s.exists?s.data():null}catch(e){}
+  mostrar(p);
+  document.getElementById("gateReq").onsubmit=async ev=>{ev.preventDefault();const f=ev.target;
+    const nome=f.nome.value.trim();if(!nome){document.getElementById("gateErr").textContent="Digite seu nome.";return}
+    const d={nome,telefone:f.telefone.value.trim(),funcao:f.funcao.value.trim(),email,status:"pendente",em:new Date().toISOString()};
+    f.querySelector("button").disabled=true;
+    try{await ref.set(d);mostrar(d)}catch(e){document.getElementById("gateErr").textContent="Não foi possível enviar ("+(e&&e.code||"erro")+"). Tente de novo.";f.querySelector("button").disabled=false}};
+}
 auth.onAuthStateChanged(async u=>{
   if(!u){if(iniciado){location.reload();return}porta(MSG0);return}
   const email=(u.email||"").toLowerCase();
@@ -2123,7 +2179,7 @@ auth.onAuthStateChanged(async u=>{
   try{const s=await db.doc("usuarios/"+email).get();perfil=s.exists?s.data():null}catch(e){perfil=null}
   if(email===FIN)perfil={...(perfil||{}),perfil:"gestao",nome:(perfil&&perfil.nome)||"Financeiro"};
   if(!perfil||!["gestao","comercial"].includes(perfil.perfil)||(perfil.perfil==="comercial"&&!perfil.equipeId)){
-    porta(`Olá${u.displayName?", "+esc(u.displayName.split(" ")[0]):""}. Sua conta <b>${esc(email)}</b> ainda não tem acesso ao Maître.<br>Peça ao financeiro para liberar em <b>Orçamentos → Equipe</b>.`,{trocar:true,botao:false});return}
+    pedirAcesso(u,email);return}
   if(iniciado)return;iniciado=true;
   gate.hidden=true;
   S.me=email;S.perfil=perfil;S.role=perfil.perfil==="gestao"?"admin":"comercial";S.names[email]=perfil.nome||u.displayName||email;
@@ -2138,6 +2194,7 @@ auth.onAuthStateChanged(async u=>{
   for(const t of ["boleto","orcamento"])db.doc("contadores/"+t).onSnapshot(s=>{S.cont[t]=s.exists?s.data():{};agendar()},onErr);
   if(S.role==="admin"){
     ["pagar","extrato","contas","transf","donos"].forEach(simples);
+    db.collection("pedidos").onSnapshot(snap=>{S.pedidos=snap.docs.map(d=>({...d.data(),id:d.id}));agendar();const l=document.getElementById("eqList");if(l&&l._redraw)l._redraw()},onErr);
     db.collection("usuarios").onSnapshot(snap=>{S.usuarios=snap.docs.map(d=>({...d.data(),id:d.id}));for(const x of S.usuarios)if(x.nome)S.names[x.id]=x.nome;agendar()},onErr);
     for(const c of PRIV)db.collection(c).onSnapshot(snap=>{(PARTS[c]=PARTS[c]||{})._legado=snap.docs.map(d=>({...d.data(),id:d.id,_c:c,_o:"_legado"}));juntar(c);S.loaded[c]=true;agendar()},onErr);
     atualizarPastas();

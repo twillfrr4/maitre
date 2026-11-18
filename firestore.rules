@@ -9,6 +9,13 @@ service cloud.firestore {
     function comercial(){ return logado() && temPerfil() && perfil().perfil == 'comercial'; }
     function membro(){ return gestao() || comercial(); }
 
+    match /pedidos/{e} {
+      allow read: if logado() && (e == email() || gestao());
+      allow create: if logado() && e == email() && request.resource.data.status == 'pendente'
+        && request.resource.data.keys().hasOnly(['nome','telefone','funcao','email','status','em'])
+        && request.resource.data.nome is string && request.resource.data.nome.size() <= 80;
+      allow write: if gestao();
+    }
     match /usuarios/{e} { allow read: if logado() && (e == email() || gestao()); allow write: if gestao(); }
     match /equipe/{id} { allow read: if membro(); allow write: if gestao(); }
     match /config/{id} { allow read: if membro(); allow write: if gestao(); }
