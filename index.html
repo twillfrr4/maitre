@@ -306,6 +306,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
 .gate-card .btn{width:100%;justify-content:center;gap:10px}
 .gate-err{color:var(--danger,#b42318);font-size:13px;margin-top:12px;min-height:1em}
 .who-out{margin-left:6px}
+[hidden]{display:none!important}
 .brand{text-align:center}.brand .logo{margin-inline:auto}
 .brand-n{font-family:"Cormorant Garamond",Georgia,serif;font-style:italic;font-weight:300;font-size:16px;line-height:1.2;letter-spacing:.01em;white-space:nowrap;margin-top:10px;color:var(--muted)}
 .gate-t{font-family:"Cormorant Garamond",Georgia,serif!important;font-style:italic;font-weight:300!important;font-size:24px!important;line-height:1.2;letter-spacing:0!important;margin:6px 0 2px!important}
@@ -353,7 +354,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
 "use strict";
 /* ---------- estado ---------- */
 const COLS=["clientes","contratos","receber","pagar","extrato","contas","transf","orcamentos","equipe"];
-const S={clientes:[],contratos:[],receber:[],pagar:[],extrato:[],contas:[],transf:[],orcamentos:[],equipe:[],vinculos:[],usuarios:[],pedidos:[],perfil:null,donos:[],donosOk:new Set(),cont:{},role:"",avisoLimite:false,sel:new Set(),config:{},loaded:{},me:null,names:{},canWrite:true,dbState:"connecting",dbError:""};
+const S={clientes:[],contratos:[],receber:[],pagar:[],extrato:[],contas:[],transf:[],orcamentos:[],equipe:[],vinculos:[],usuarios:[],pedidos:[],lixeira:[],log:[],perfil:null,donos:[],donosOk:new Set(),cont:{},role:"",avisoLimite:false,sel:new Set(),config:{},loaded:{},me:null,names:{},canWrite:true,dbState:"connecting",dbError:""};
 const UI={rf:"abertos",rq:"",pf:"abertos",pq:"",cf:"proximos",cq:"",kq:"",xf:"pendentes",xt:"todas",xm:"",xq:"",xlim:150,xb:"",rb:"",pb:"",pp:"",ps:"venc",of:"abertos",oq:"",or:"",ov:"lista",op:"3m",cr:"",rp:"ano",rs:"data",rc:false,rv:"eventos",dm:"realizado",dy:0};
 let db=null,userCap=null,assetsCap=null,dlCap=null;
 
@@ -369,6 +370,7 @@ const NAV=[
  ["conciliacao","Conciliação",'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4M15 15l1.5 1.5L19 14"/>'],
  ["bancos","Bancos",'<path d="M3 10l9-6 9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18"/>'],
  ["resultados","Resultados",'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'],
+ ["controle","Controle",'<path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/>'],
  ["clientes","Clientes",'<circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6M17 11a3 3 0 1 0 0-6M22 21c0-3-2-5-5-5.5"/>'],
 ];
 
@@ -455,7 +457,7 @@ function renderNav(){
   const venc=S.receber.filter(x=>status(x)==="vencido").length;
   const vp=S.pagar.filter(x=>status(x)==="vencido").length;
   let pendTx=0;for(const m of S.extrato){const t=m.t||{};for(const k in t)if(!t[k].st||t[k].st==="pendente")pendTx++}
-  document.getElementById("nav").innerHTML=NAV.filter(n=>ADMIN()||!["bancos","conciliacao","pagar","resultados"].includes(n[0])).map(([k,l,ic])=>{
+  document.getElementById("nav").innerHTML=NAV.filter(n=>ADMIN()||!["bancos","conciliacao","pagar","resultados","controle"].includes(n[0])).map(([k,l,ic])=>{
     const c=k==="receber"?venc:k==="pagar"?vp:0;
     const pc=k==="conciliacao"?pendTx:k==="orcamentos"?S.orcamentos.filter(followDue).length:0;
     return `<a href="#${k}" ${r===k?'aria-current="page"':""}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ic}</svg><span class="lb">${l}</span>${c?`<span class="count" title="vencidos">${c}</span>`:""}${pc?`<span class="count neutral" title="pendentes">${pc}</span>`:""}</a>`}).join("");
@@ -473,9 +475,9 @@ function banner(){
 function render(){
   renderNav();
   let r=route();
-  if(!ADMIN()&&["bancos","conciliacao","pagar","resultados"].includes(r))r="painel";
+  if(!ADMIN()&&["bancos","conciliacao","pagar","resultados","controle"].includes(r))r="painel";
   const m=document.getElementById("main");
-  const views={painel:ADMIN()?vPainel:vPainelComercial,orcamentos:vOrcamentos,contratos:vContratos,receber:vReceber,pagar:vPagar,conciliacao:vConciliacao,bancos:vBancos,resultados:vResultados,clientes:vClientes};
+  const views={painel:ADMIN()?vPainel:vPainelComercial,orcamentos:vOrcamentos,contratos:vContratos,receber:vReceber,pagar:vPagar,conciliacao:vConciliacao,bancos:vBancos,resultados:vResultados,clientes:vClientes,controle:vControle};
   m.innerHTML=banner()+views[r]();
   if(r==="painel")drawChart();
   resolveNames();
@@ -596,7 +598,7 @@ function vContratos(){
     const ps=S.receber.filter(r=>r.contratoId===c.id);const e=ps.find(p=>p.tipo==="entrada"),qq=ps.find(p=>p.tipo==="quitacao");
     const pago=ps.filter(p=>p.status==="pago").reduce((s,p)=>s+(p.valorPago??p.valor),0);
     return `<tr><td><div class="t">${esc(c.evento)} ${respTag(c.responsavelId)}${c.status==="cancelado"?` <span class="pill p-cancelado" style="text-decoration:none">Cancelado</span>`:""}</div>${c.cancelamento?`<div class="s">Recebido ${brl(c.cancelamento.recebido)} · devolvido ${brl(c.cancelamento.devolvido)} · retido ${brl(c.cancelamento.retido)}${c.cancelamento.motivo?" · "+esc(c.cancelamento.motivo):""}</div>`:""}<div class="s">${esc(clienteNome(c.clienteId)||"Cliente removido")}${c.local?" · "+esc(c.local):""}${c.convidados?" · "+esc(c.convidados)+" convidados":""}</div></td>
-    <td class="num">${fmtD(c.dataEvento)}</td><td class="r"><div class="num">${brl(c.valorTotal)}</div><div class="s num">recebido ${brl(pago)}</div></td>
+    <td class="num">${fmtD(c.dataEvento)}</td><td class="r"><div class="num">${brl(c.valorTotal)}</div>${c.aditivos&&c.aditivos.length?`<div class="s">${c.aditivos.length} aditivo(s)</div>`:""}<div class="s num">recebido ${brl(pago)}</div></td>
     <td>${e?pill(status(e))+`<div class="s num">${brl(e.valor)} · ${fmtD(e.vencimento)}</div>`:"—"}</td>
     <td>${qq?pill(status(qq))+`<div class="s num">${brl(qq.valor)} · ${fmtD(qq.vencimento)}</div>`:"—"}</td>
     <td class="r"><div class="row-act">${ADMIN()?`<button class="btn sm ghost" data-a="res-det" data-id="${c.id}">Resultado</button>`:""}${docsBtn("contratos",c)}${W()?`<button class="btn sm" data-a="edit-contrato" data-id="${c.id}">Editar</button>`:""}</div></td></tr>`}).join("")}</tbody></table></div>`
@@ -630,7 +632,7 @@ function vReceber(){
   const body=list.length?`<div class="tbl-wrap"><table><thead><tr><th>Vencimento</th><th>Cliente / descrição</th><th>Boleto</th><th class="r">Valor</th><th>Situação</th><th class="r"></th></tr></thead><tbody>${list.map(x=>{const st=status(x);const c=byId(S.contratos,x.contratoId);
     return `<tr class="${rowCls(st)}"><td class="num">${fmtD(x.vencimento)}</td>
     <td><div class="t">${esc(clienteNome(x.clienteId)||"—")}</div><div class="s">${esc(x.descricao||"")}${c?" · evento "+fmtD(c.dataEvento):""}</div></td>
-    <td class="num">${esc(x.numero||"—")}</td><td class="r num">${brl(x.valor)}</td>
+    <td class="num">${esc(x.numero||"—")}</td><td class="r num">${brl(x.valor)}${(()=>{const en=encargos(x);return en?`<div class="s" title="Multa ${pctTxt(en.mp)} + juros ${pctTxt(en.jm)} ao mês · ${en.dias} dia(s)" style="color:var(--bad)">atualizado ${brl(en.total)}</div>`:""})()}</td>
     <td>${pill(st)}${st!=="pago"&&x.ultimoLembrete?`<div class="s">lembrete ${fmtD((x.ultimoLembrete.em||"").slice(0,10))}${x.lembretes>1?` (${x.lembretes}×)`:""}</div>`:""}${st==="pago"?`<div class="s">${fmtD(x.pagoEm)}${quem(x.pagoPor)?" · "+quem(x.pagoPor):""}${x.comprovanteId?" · "+comprovanteLink(x):""}</div>`:""}${metaPg(x)}</td>
     <td class="r"><div class="row-act">${x.status!=="pago"&&x.status!=="cancelado"?`<button class="btn sm" data-a="lembrete" data-id="${x.id}" title="Mensagem de cobrança para WhatsApp">Lembrete</button><button class="btn sm" data-a="copiar-banco" data-id="${x.id}" title="Dados para gerar o boleto no banco">Dados p/ banco</button>${W()?`<button class="btn sm primary" data-a="pagar-rec" data-id="${x.id}">Marcar pago</button>`:""}`:""}${x.status==="pago"&&W()?`<button class="btn sm ghost" data-a="desfazer-rec" data-id="${x.id}">Desfazer</button>`:""}${W()?`<button class="btn sm ghost" data-a="edit-rec" data-id="${x.id}">Editar</button>`:""}</div></td></tr>`}).join("")}</tbody></table></div>`
    :`<div class="empty"><strong>Nenhuma parcela neste filtro</strong>As parcelas de entrada e quitação são criadas ao cadastrar um contrato. Para cobranças fora de contrato, use “Cobrança avulsa”.</div>`;
@@ -709,6 +711,7 @@ function need(cond,msg){if(!cond)throw new Error(msg)}
 /* ---------- escrita ---------- */
 async function write(fn){
   try{await fn()}catch(e){
+    if(e&&e.code==="mes-fechado")throw new Error(e.message);
     if(e&&e.code==="permission-denied"&&S.dbState==="on")throw new Error("Você não tem permissão para registrar isso. Fale com o financeiro.");
     if(e&&e.code==="resource-exhausted")throw new Error("O banco de dados atingiu o limite de registros. Exporte e arquive itens antigos.");
     throw new Error("Não foi possível salvar ("+(e&&e.code||"erro")+"). Tente de novo.");
@@ -759,8 +762,9 @@ function formContrato(c={},preCliente){
    (novo?"":SEL("status","Situação",[["ativo","Ativo"],["cancelado","Cancelado"]],c.status||"ativo",{full:true}))+
    (novo||c.status==="cancelado"?"":`<div class="fld full cancel" id="cancelBox" hidden><p style="margin:0">Já recebido deste contrato: <b class="num">${brl(ps.filter(p=>p.status==="pago").reduce((a,p)=>a+((p.valorPago??p.valor)||0),0))}</b>. As parcelas em aberto serão canceladas.</p>
      <div class="lead-g">${F("motivoCanc","Motivo do cancelamento","",{full:true})}${ADMIN()?F("devolver","Devolver ao cliente (R$)","0,00",{attrs:'inputmode="decimal"',hint:"O que não for devolvido fica como retido (multa/sinal)"})+F("dataDev","Data da devolução",addDays(todayISO(),7),{type:"date"}):`<p class="hint fld full" style="margin:0">Se houver devolução, a gestão registra.</p>`}</div></div>`)+
+   (c.aditivos&&c.aditivos.length?`<div class="fld full"><span class="lbl-like">Aditivos</span>${c.aditivos.map(a=>`<div class="s" style="padding:4px 0;border-bottom:1px solid var(--line)"><b class="num">${a.valor>=0?"+":"−"} ${brl(Math.abs(a.valor))}</b> · ${fmtD(a.data)} · ${esc(a.descricao)}${a.convidadosDepois?` · ${a.convidadosAntes||"?"}→${a.convidadosDepois} convidados`:""} <span class="muted">(${a.cobranca==="nova"?"parcela nova":"na quitação"})</span></div>`).join("")}<span class="hint">Valor original do contrato: ${brl(c.valorOriginal??c.valorTotal)}</span></div>`:"")+
    TA("obs","Observações",c.obs)+anexosField("Contrato em PDF ou Word"),
-   {registro:c,submit:novo?"Salvar e gerar parcelas":"Salvar",
+   {registro:c,submit:novo?"Salvar e gerar parcelas":"Salvar",extra:!novo&&c.status!=="cancelado"&&W()?`<button type="button" class="btn" id="btnAditivo">+ Aditivo</button>`:"",
     danger:novo?null:{label:"Excluir",fn:async()=>{
       const pagos=ps.filter(p=>p.status==="pago").length;
       if(pagos){showErr("Este contrato tem parcela paga. Use a situação “Cancelado” em vez de excluir, para manter o histórico.");return}
@@ -778,6 +782,7 @@ function formContrato(c={},preCliente){
       ["valorTotal","pctEntrada"].forEach(n=>$n(f,n).addEventListener("input",upd));upd();
       const stS=f.querySelector('[name="status"]'),cb=f.querySelector("#cancelBox");if(stS&&cb){const u=()=>{cb.hidden=stS.value!=="cancelado"};stS.addEventListener("change",u);u()}
       bindAnexos(f,anexos);
+      const ba=dlg.querySelector("#btnAditivo");if(ba)ba.onclick=()=>{dlg.close();formAditivo(byId(S.contratos,c.id)||c)};
       f.querySelector("#novoCli").onclick=()=>{const keep={...c,...Object.fromEntries(new FormData(f))};dlg.close();
         formCliente({},id=>formContrato({...c,evento:keep.evento,dataEvento:keep.dataEvento,local:keep.local,convidados:keep.convidados,dataAssinatura:keep.dataAssinatura,valorTotal:parseBRL(keep.valorTotal)||c.valorTotal,pctEntrada:Number(keep.pctEntrada),obs:keep.obs,responsavelId:keep.responsavelId,contaRec:keep.contaRec,anexos},id),c.orcamentoId?((byId(S.orcamentos,c.orcamentoId)||{})._o||donoPara(keep.responsavelId)):donoPara(keep.responsavelId))};
     },
@@ -830,7 +835,7 @@ function formContrato(c={},preCliente){
             await alvo("contratos",c).set({...strip(c),...o,cancelamento:canc,...stamp()});
             if(canc.devolvido>0)await newRef("pagar").set({fornecedor:cli?cli.nome:"Cliente",descricao:`Devolução · cancelamento ${o.evento}`,categoria:"Devoluções",valor:canc.devolvido,vencimento:String(fd.get("dataDev")||todayISO()),prioridade:1,forma:"PIX",contratoId:c.id,status:"aberto",criadoEm:new Date().toISOString(),criadoPor:S.me||null});
           }
-          if(muda){for(const p of ps)await docRef("receber",p).delete();await docRef("contratos",c).delete();
+          if(muda){await semLixeira(async()=>{for(const p of ps)await docRef("receber",p).delete();await docRef("contratos",c).delete()});
             const ob=c.orcamentoId&&byId(S.orcamentos,c.orcamentoId);if(ob)await moverDoc("orcamentos",ob,novoDono)}
         }
       });
@@ -838,6 +843,41 @@ function formContrato(c={},preCliente){
     }});
 }
 function strip(o){const {id,_t,_c,_o,...r}=o;return r}
+
+/* aditivo de contrato: muda valor/convidados e ajusta as parcelas em aberto */
+function formAditivo(c){
+  const ps=S.receber.filter(r=>r.contratoId===c.id&&r.status!=="cancelado");
+  const q=ps.find(p=>p.tipo==="quitacao"&&p.status!=="pago");
+  const opts=[...(q?[["quitacao",`Somar/abater na quitação (${brl(q.valor)} · vence ${fmtD(q.vencimento)})`]]:[]),["nova","Gerar parcela nova"]];
+  openDlg(`Aditivo · ${esc(c.evento)}`,
+   `<p class="fld full hint" style="margin:0">Valor atual do contrato: <b class="num">${brl(c.valorTotal)}</b>${c.convidados?` · ${c.convidados} convidados`:""}. Use valor negativo (ex.: -1.500,00) para redução.</p>`+
+   F("data","Data do aditivo",todayISO(),{type:"date",req:true})+F("valor","Valor (R$)","",{req:true,attrs:'inputmode="decimal" placeholder="Ex.: 3.200,00 ou -1.500,00"'})+
+   F("descricao","O que mudou","",{full:true,req:true,attrs:'placeholder="Ex.: +20 convidados e open bar premium"'})+
+   F("convidados","Novo total de convidados (opcional)","",{type:"number",attrs:'min="0"'})+
+   SEL("cobranca","Como cobrar",opts,opts[0][0],{full:true})+
+   `<div id="novaBox" class="lead-g">${F("vencimento","Vencimento da parcela nova",q?q.vencimento:addDays(todayISO(),15),{type:"date"})}</div>`,
+   {submit:"Registrar aditivo",onOpen:f=>{const cb=$n(f,"cobranca"),nb=f.querySelector("#novaBox");const u=()=>{nb.hidden=cb.value!=="nova"};cb.addEventListener("change",u);u()},
+    onSubmit:async fd=>{
+      const valor=parseBRL(fd.get("valor"));const desc=String(fd.get("descricao")||"").trim();const cobr=String(fd.get("cobranca"));
+      need(!isNaN(valor)&&valor!==0,"Informe o valor do aditivo (ex.: 3.200,00 ou -1.500,00).");need(desc,"Descreva o que mudou.");
+      need(c.valorTotal+valor>0,"O contrato ficaria com valor zero ou negativo.");
+      if(cobr==="nova")need(valor>0,"Para reduzir o valor, escolha abater na quitação. Se já foi tudo pago, lance a devolução em A pagar.");
+      if(cobr==="quitacao")need(q&&q.valor+valor>0,"A quitação ficaria zerada ou negativa. Ajuste o valor ou registre uma devolução.");
+      const conv=fd.get("convidados")?Number(fd.get("convidados")):null;
+      const ad={id:Math.random().toString(36).slice(2,9),data:String(fd.get("data")||todayISO()),descricao:desc,valor,cobranca:cobr,convidadosAntes:c.convidados||null,convidadosDepois:conv,por:S.me||null,em:new Date().toISOString()};
+      await write(async()=>{
+        if(cobr==="nova"){
+          const [num]=await reservar("boleto",1);
+          const ref=c._o?db.collection(pastaDe(c._o,"receber")).doc():newRef("receber");ad.parcelaId=ref.id;
+          await ref.set({tipo:"aditivo",numero:num,valor,vencimento:String(fd.get("vencimento")||addDays(todayISO(),15)),descricao:`Aditivo · ${desc} · ${c.evento}`,forma:"Boleto",contaId:c.contaRec||"",contratoId:c.id,clienteId:c.clienteId,status:"aberto",criadoEm:new Date().toISOString(),criadoPor:S.me||null});
+        }else{
+          await docRef("receber",q).set({...strip(q),valor:q.valor+valor,...stamp()});ad.parcelaId=q.id;
+        }
+        await docRef("contratos",c).set({...strip(c),valorOriginal:c.valorOriginal??c.valorTotal,valorTotal:c.valorTotal+valor,convidados:conv||c.convidados||null,aditivos:[...(c.aditivos||[]),ad],...stamp()});
+      });
+      toast(`Aditivo registrado · contrato agora ${brl(c.valorTotal+valor)}`);
+    }});
+}
 
 /* receber avulso / editar */
 function formReceita(x={}){
@@ -901,7 +941,7 @@ function formPago(col,x){
   const canUp=!!assetsCap;
   openDlg(col==="receber"?"Registrar recebimento":"Registrar pagamento",
    `<p class="fld full" style="margin:0"><b>${esc(col==="receber"?(clienteNome(x.clienteId)||x.descricao):x.fornecedor)}</b><br><span class="muted">${esc(x.descricao||"")}${x.numero?" · boleto "+esc(x.numero):""} · vence ${fmtD(x.vencimento)}</span></p>`+
-   F("pagoEm","Data do pagamento",todayISO(),{type:"date",req:true})+F("valorPago","Valor pago (R$)",brlIn(x.valor),{req:true,attrs:'inputmode="decimal"'})+
+   F("pagoEm","Data do pagamento",todayISO(),{type:"date",req:true})+F("valorPago","Valor pago (R$)",brlIn(x.valor),{req:true,attrs:'inputmode="decimal"',hint:(()=>{const en=col==="receber"?encargos(x):null;return en?`Com multa e juros (${en.dias} dia(s)): ${brl(en.total)}. O que passar do valor da parcela entra como encargos recebidos.`:""})()})+
    CONTA_SEL("contaId",col==="receber"?"Entrou no banco":"Saiu do banco",x.contaId,{vazio:"Escolha"})+FORMA_SEL("forma","Forma",x.forma,col)+
    (canUp?`<div class="fld full"><label for="f_comp">Comprovante (imagem ou PDF)</label><input id="f_comp" name="comp" type="file" accept="image/*,application/pdf"><span class="hint">Opcional. Fica guardado junto do registro para o financeiro conferir.</span></div>`:"")+
    `<div class="fld full parcial" id="parcialBox" hidden><label class="chk"><input type="checkbox" name="gerarResto" checked> <span id="parcialTxt"></span></label>${F("vencResto","Vencimento do restante",x.vencimento&&x.vencimento>todayISO()?x.vencimento:addDays(todayISO(),7),{type:"date"})}</div>`+
@@ -939,11 +979,21 @@ async function desfazer(col,x){
 }
 
 /* lembrete de cobrança (o envio é manual: copiar ou abrir no WhatsApp) */
+/* multa e juros de parcelas atrasadas */
+function encargos(x){
+  if(!x||status(x)!=="vencido")return null;
+  const mp=Number(S.config.multaPct)||0,jm=Number(S.config.jurosMesPct)||0;if(!mp&&!jm)return null;
+  const dias=Math.max(0,Math.round((new Date(todayISO()+"T12:00")-new Date(x.vencimento+"T12:00"))/864e5));if(!dias)return null;
+  const v=x.valor||0,multa=Math.round(v*mp/100),juros=Math.round(v*jm/100/30*dias);
+  return {dias,multa,juros,total:v+multa+juros,mp,jm};
+}
+const pctTxt=n=>String(n).replace(".",",")+"%";
 function foneWhats(t){let d=String(t||"").replace(/\D/g,"");if(!d)return "";if(d.length>=12&&d.startsWith("55"))return d;if(d.startsWith("0"))d=d.replace(/^0+/,"");return (d.length===10||d.length===11)?"55"+d:""}
 function textoLembrete(x){
   const c=byId(S.clientes,x.clienteId)||{};const nome=(c.nome||"").split(" ")[0];const st=status(x);
   const ref=x.descricao?`, referente a ${x.descricao}`:"";const bol=x.numero?`o boleto nº ${x.numero}`:"a parcela";
-  const corpo=st==="vencido"?`${bol}${ref}, no valor de ${brl(x.valor)}, venceu em ${fmtD(x.vencimento)} e ainda não identificamos o pagamento. Se já pagou, pode nos enviar o comprovante por aqui?`
+  const en=encargos(x);
+  const corpo=st==="vencido"?`${bol}${ref}, no valor de ${brl(x.valor)}, venceu em ${fmtD(x.vencimento)} e ainda não identificamos o pagamento.${en?` Com multa de ${pctTxt(en.mp)} e juros de ${pctTxt(en.jm)} ao mês, o valor atualizado até hoje (${en.dias} dia(s) de atraso) é de ${brl(en.total)}.`:""} Se já pagou, pode nos enviar o comprovante por aqui?`
     :st==="hoje"?`${bol}${ref}, no valor de ${brl(x.valor)}, vence hoje (${fmtD(x.vencimento)}).`
     :`${bol}${ref}, no valor de ${brl(x.valor)}, vence em ${fmtD(x.vencimento)}.`;
   return `Olá${nome?", "+nome:""}! Tudo bem? Aqui é da Bosco Gastronomia e Eventos.\n\nPassando para lembrar que ${corpo}\n\nQualquer dúvida, estamos à disposição. Obrigado!`;
@@ -1425,9 +1475,11 @@ async function garantirDono(owner){ // registra a pasta para o financeiro enxerg
 /* move um registro para a pasta de outro vendedor */
 async function moverDoc(col,x,owner){
   if(!x||x._o===owner)return;
+  return semLixeira(async()=>{
   await garantirDono(owner);
   await refEm(col,owner,x.id).set(strip(x));
   await docRef(col,x).delete();
+  });
 }
 async function copiarCliente(cliId,owner){ // contrato de um vendedor precisa enxergar o cliente
   const c=S.clientes.find(k=>k.id===cliId&&k._o===owner);if(c)return;
@@ -1645,6 +1697,7 @@ function periodoRes(){
 }
 function vResultados(){
   if(UI.rv==="dre")return vDRE();
+  if(UI.rv==="comissoes")return vComissoes();
   const [d0,d1,lbl]=periodoRes();
   const cs=S.contratos.filter(c=>(c.dataEvento||"")>=d0&&(c.dataEvento||"")<=d1&&(UI.rc||c.status!=="cancelado"))
     .map(c=>({c,r:resultadoEvento(c)})).sort((a,b)=>UI.rs==="margem"?((a.r.margem??9)-(b.r.margem??9)):(b.c.dataEvento||"").localeCompare(a.c.dataEvento||""));
@@ -1665,7 +1718,7 @@ function vResultados(){
     <td class="num" style="white-space:nowrap">${mbar(r.margem)}</td>
     <td class="r"><button class="btn sm" data-a="res-det" data-id="${c.id}">Detalhes</button></td></tr>`).join("");
   return `<div class="head"><div><h1>Resultados</h1><p class="sub">${lbl} · quanto cada evento deixou depois dos custos diretos</p></div><div class="actions">${W()?`<button class="btn primary" data-a="nova-despesa">+ Despesa</button>`:""}</div></div>
-  <div class="tabs"><button class="tab" data-a="rv" data-v="eventos" aria-pressed="true">Por evento</button><button class="tab" data-a="rv" data-v="dre" aria-pressed="false">DRE mensal</button></div>
+  ${tabsRes("eventos")}
   <div class="toolbar"><div class="chips">${chips}</div><div class="chips"><label class="chk" style="font-weight:500"><input type="checkbox" id="rc" ${UI.rc?"checked":""}> incluir cancelados</label><select class="search" style="width:auto" id="rs" aria-label="Ordenar"><option value="data" ${UI.rs!=="margem"?"selected":""}>Por data</option><option value="margem" ${UI.rs==="margem"?"selected":""}>Menor margem primeiro</option></select></div></div>
   ${cs.length?`<div class="kpis">
    <div class="kpi"><span class="lbl">Receita dos eventos</span><span class="val">${brl(tot.receita)}</span><span class="det">${cs.length} evento(s)${tot.conv?` · ${brl(Math.round(tot.receita/tot.conv))}/convidado`:""}</span></div>
@@ -1678,6 +1731,41 @@ function vResultados(){
   <section class="panel"><div class="tbl-wrap"><table><thead><tr><th>Data</th><th>Evento</th><th class="r">Receita</th><th class="r">Custos</th><th class="r">Resultado</th><th>Margem</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></section>`
   :`<section class="panel"><div class="empty"><strong>Nenhum evento neste período</strong>Os resultados aparecem a partir dos contratos. Ao lançar uma despesa, escolha o evento a que ela pertence.</div></section>`}
   <p class="muted s" style="font-size:12px;margin:10px 2px">Receita = valor do contrato (em cancelados, o valor retido). Custos = despesas a pagar ligadas ao evento, pagas ou não; devoluções não contam como custo. Despesas gerais = contas sem evento (aluguel, folha, impostos…) no mesmo período.</p>`;
+}
+function tabsRes(at){return `<div class="tabs">${[["eventos","Por evento"],["dre","DRE mensal"],["comissoes","Comissões"]].map(([k,l])=>`<button class="tab" data-a="rv" data-v="${k}" aria-pressed="${at===k}">${l}</button>`).join("")}</div>`}
+function dadosComissao(mes,base){
+  const pctDe=eid=>{const e=byId(S.equipe,eid);const v=e&&e.comissaoPct!=null&&e.comissaoPct!==""?Number(e.comissaoPct):Number(S.config.comissaoPct)||0;return v};
+  const G={};const add=(eid,item)=>{const k=eid||"";(G[k]=G[k]||{eid:k,itens:[],base:0}).itens.push(item);G[k].base+=item.base};
+  if(base==="recebido"){
+    for(const p of S.receber){if(p.status!=="pago"||!(p.pagoEm||"").startsWith(mes)||!p.contratoId)continue;const c=byId(S.contratos,p.contratoId);if(!c)continue;
+      add(c.responsavelId,{data:p.pagoEm,desc:`${c.evento} · ${p.descricao||p.tipo||"parcela"}`,base:(p.valorPago??p.valor)||0})}
+  }else{
+    for(const c of S.contratos){if(c.status==="cancelado"||!(c.dataAssinatura||"").startsWith(mes))continue;
+      add(c.responsavelId,{data:c.dataAssinatura,desc:`${c.evento} · ${clienteNome(c.clienteId)}`,base:c.valorTotal||0})}
+  }
+  return Object.values(G).map(g=>({...g,pct:g.eid?pctDe(g.eid):0,nome:g.eid?respNome(g.eid):"Sem responsável"})).map(g=>({...g,valor:Math.round(g.base*g.pct/100)})).sort((a,b)=>b.base-a.base);
+}
+function vComissoes(){
+  const mes=UI.cm||todayISO().slice(0,7);const base=UI.cb||S.config.comissaoBase||"fechado";
+  const rows=dadosComissao(mes,base);const tb=rows.reduce((a,r)=>a+r.base,0),tc=rows.reduce((a,r)=>a+r.valor,0);
+  const nomeMes=new Date(mes+"-15").toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
+  return `<div class="head"><div><h1>Resultados</h1><p class="sub">Comissões de ${nomeMes} · ${base==="recebido"?"sobre o que os clientes pagaram no mês":"sobre os contratos assinados no mês"}</p></div><div class="actions"><button class="btn" data-a="com-csv">Exportar planilha</button></div></div>
+  ${tabsRes("comissoes")}
+  <div class="toolbar"><div class="chips"><button class="chip" data-a="cb" data-v="fechado" aria-pressed="${base==="fechado"}">Contratos assinados</button><button class="chip" data-a="cb" data-v="recebido" aria-pressed="${base==="recebido"}">Valores recebidos</button></div>
+   <input class="search" style="width:auto" type="month" id="cm" value="${mes}" aria-label="Mês"></div>
+  ${rows.length?`<section class="panel"><div class="tbl-wrap"><table><thead><tr><th>Vendedor</th><th>${base==="recebido"?"Parcelas recebidas":"Contratos assinados"}</th><th class="r">Base</th><th class="r">Comissão %</th><th class="r">Comissão</th></tr></thead><tbody>
+   ${rows.map(r=>`<tr><td><div class="t">${esc(r.nome)}</div></td><td>${r.itens.map(i=>`<div class="s">${fmtD(i.data)} · ${esc(i.desc)} · <span class="num">${brl(i.base)}</span></div>`).join("")}</td><td class="r num">${brl(r.base)}</td>
+    <td class="r">${r.eid&&W()?`<input class="search cpct num" style="width:76px;text-align:right" inputmode="decimal" data-eq="${r.eid}" value="${String(r.pct).replace(".",",")}" aria-label="Percentual de ${esc(r.nome)}">`:"—"}</td><td class="r num"><b>${brl(r.valor)}</b></td></tr>`).join("")}
+   <tr><td colspan="2"><b>Total</b></td><td class="r num"><b>${brl(tb)}</b></td><td></td><td class="r num"><b>${brl(tc)}</b></td></tr></tbody></table></div></section>`
+  :`<section class="panel"><div class="empty"><strong>Nada neste mês</strong>${base==="recebido"?"Nenhuma parcela de contrato foi paga neste mês.":"Nenhum contrato assinado neste mês."}</div></section>`}
+  <p class="muted s" style="font-size:12px;margin:10px 2px">O percentual de cada vendedor fica salvo ao editar o campo (padrão: ${pctTxt(Number(S.config.comissaoPct)||0)}, ajustável em Controle → Configurações). Contratos cancelados não entram. Em “Contratos assinados”, a base é o valor atual do contrato, já com aditivos.</p>`;
+}
+async function exportComissoes(){
+  const mes=UI.cm||todayISO().slice(0,7);const base=UI.cb||S.config.comissaoBase||"fechado";const rows=dadosComissao(mes,base);
+  const L=[["Vendedor","Data","Descrição","Base","Comissão %","Comissão"]];
+  for(const r of rows)for(const i of r.itens)L.push([r.nome,fmtD(i.data),i.desc,brlIn(i.base),String(r.pct).replace(".",","),brlIn(Math.round(i.base*r.pct/100))]);
+  const csv="\ufeff"+L.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(";")).join("\r\n");
+  try{await dlCap.save({filename:`comissoes-${mes}-${base}.csv`,data:new Blob([csv],{type:"text/csv"})})}catch(e){toast("Não foi possível exportar")}
 }
 function formResultado(id){
   const c=byId(S.contratos,id);if(!c)return;const r=resultadoEvento(c);
@@ -1766,7 +1854,7 @@ function vDRE(){
    ${pctL("Margem líquida",res,recL)}
   </tbody></table></div>`;
   return `<div class="head"><div><h1>Resultados</h1><p class="sub">DRE ${ano} · ${UI.dm==="previsto"?"realizado + previsto (em aberto pela data de vencimento)":"realizado (o que de fato entrou e saiu)"}</p></div><div class="actions"><button class="btn" data-a="dre-csv">Exportar planilha</button></div></div>
-  <div class="tabs"><button class="tab" data-a="rv" data-v="eventos" aria-pressed="false">Por evento</button><button class="tab" data-a="rv" data-v="dre" aria-pressed="true">DRE mensal</button></div>
+  ${tabsRes("dre")}
   <div class="toolbar"><div class="chips"><button class="chip" data-a="dm" data-v="realizado" aria-pressed="${UI.dm!=="previsto"}">Realizado</button><button class="chip" data-a="dm" data-v="previsto" aria-pressed="${UI.dm==="previsto"}">Realizado + previsto</button></div>
    <select class="search" style="width:auto" id="dy" aria-label="Ano">${anos.map(a=>`<option value="${a}" ${a===ano?"selected":""}>${a}</option>`).join("")}</select></div>
   ${vazio?`<section class="panel"><div class="empty"><strong>Nada lançado em ${ano}</strong>O DRE se monta sozinho com os recebimentos e pagamentos registrados.</div></section>`:`<section class="panel">${body}</section>`}
@@ -1856,6 +1944,119 @@ function formEquipe(){
 }
 function closeDlgSafe(){const d=document.getElementById("dlg");if(d&&d.open)d.close()}
 
+/* ---------- Controle (gestão) ---------- */
+const COL_N={clientes:"Cliente",contratos:"Contrato",receber:"A receber",orcamentos:"Orçamento",pagar:"A pagar",contas:"Banco",transf:"Transferência",equipe:"Equipe",usuarios:"Acesso",config:"Configurações"};
+const mesNome=m=>m?new Date(m+"-15").toLocaleDateString("pt-BR",{month:"long",year:"numeric"}):"";
+function resumoDe(col,x){
+  if(!x)return "";
+  switch(col){
+    case "receber":return `${clienteNome(x.clienteId)||""} · ${x.descricao||""} · ${brl(x.valor)}${x.numero?" · boleto "+x.numero:""}`;
+    case "pagar":return `${x.fornecedor||""} · ${x.descricao||""} · ${brl(x.valor)}`;
+    case "contratos":return `${x.evento||""} · ${clienteNome(x.clienteId)||""} · ${brl(x.valorTotal)}`;
+    case "orcamentos":return `${x.numero||""} · ${x.evento||x.contatoNome||""}${x.valor?" · "+brl(x.valor):""}`;
+    case "transf":return `Transferência · ${brl(x.valor)} · ${fmtD(x.data)}`;
+    case "usuarios":return `${x.nome||""} · ${x.perfil||""}`;
+    case "config":return "regras gerais";
+    default:return x.nome||x.descricao||"";
+  }
+}
+const CAMPO_N={valor:"valor",valorTotal:"valor total",vencimento:"vencimento",status:"situação",pagoEm:"pago em",valorPago:"valor pago",descricao:"descrição",fornecedor:"fornecedor",dataEvento:"data do evento",convidados:"convidados",responsavelId:"responsável",clienteId:"cliente",contaId:"banco",prioridade:"prioridade",categoria:"categoria",nome:"nome",telefone:"telefone",evento:"evento",perfil:"perfil",numero:"número",valorOriginal:"valor original",aditivos:"aditivos",fechadoAte:"fechado até",multaPct:"multa %",jurosMesPct:"juros ao mês %",comissaoPct:"comissão %",comissaoBase:"base da comissão"};
+function fmtCampo(k,v){if(v==null||v==="")return "—";if(/^(valor|valorTotal|valorPago|saldoBanco|valorOriginal)$/.test(k))return brl(v);if(k==="fechadoAte")return mesNome(v);if(Array.isArray(v))return `${v.length} item(ns)`;if(/^\d{4}-\d{2}-\d{2}$/.test(String(v)))return fmtD(v);if(k==="responsavelId")return respNome(v)||v;if(k==="clienteId")return clienteNome(v)||v;if(k==="contaId")return contaNome(v)||v;if(typeof v==="object")return "(alterado)";return String(v).slice(0,60)}
+function diffDe(a,b){
+  if(!a||!b)return [];const out=[];
+  for(const k of new Set([...Object.keys(a),...Object.keys(b)])){
+    if(/^(atualizadoEm|atualizadoPor|criadoEm|criadoPor|ultimoLembrete|lembretes|anexos|em|fechamentos)$/.test(k))continue;
+    const x=a[k],y=b[k];if(JSON.stringify(x)===JSON.stringify(y))continue;
+    out.push({c:CAMPO_N[k]||k,de:fmtCampo(k,x),para:fmtCampo(k,y)});if(out.length>=8)break;
+  }
+  return out;
+}
+/* fechamento do mês: lançamentos pagos dentro de um mês fechado ficam travados */
+function mesTravado(col,x){
+  const ate=S.config.fechadoAte;if(!ate||!x)return "";
+  const d=col==="transf"?x.data:(x.status==="pago"?x.pagoEm:"");
+  return d&&d.slice(0,7)<=ate?d.slice(0,7):"";
+}
+function checarFechado(path,antes,depois){
+  const col=path.split("/").slice(-2)[0];if(!["receber","pagar","transf"].includes(col))return;
+  const m=mesTravado(col,antes)||mesTravado(col,depois);
+  if(m){const e=new Error(`${mesNome(m)} está fechado. Para alterar lançamentos desse mês, a gestão precisa reabrir o mês em Controle.`);e.code="mes-fechado";throw e}
+}
+let semLixeiraN=0;
+async function semLixeira(fn){semLixeiraN++;try{return await fn()}finally{semLixeiraN--}}
+function gruposLixeira(){
+  const L=S.lixeira.slice().sort((a,b)=>(b.em||"").localeCompare(a.em||""));const G=[];
+  for(const x of L){const g=G[G.length-1];if(g&&g.por===x.por&&Math.abs(new Date(g.ult)-new Date(x.em))<20000){g.itens.push(x);g.ult=x.em}else G.push({id:x.id,por:x.por,em:x.em,ult:x.em,itens:[x]})}
+  return G;
+}
+async function restaurarLote(gid){
+  const g=gruposLixeira().find(g=>g.id===gid);if(!g)return;
+  if(!await confirmBox(`Restaurar ${g.itens.length>1?g.itens.length+" itens":"este item"}?<br><span class="muted">${g.itens.map(i=>esc(COL_N[i.col]||i.col)+": "+esc(i.resumo||"")).join("<br>")}</span>`,"Restaurar"))return;
+  await act(async()=>{for(const i of g.itens){await db.doc(i.path).set(i.dados);await db.collection("lixeira").doc(i.id).delete()}},`${g.itens.length} item(ns) restaurado(s)`);
+}
+function vControle(){
+  const tab=UI.cv||"fech";
+  const tabs=`<div class="tabs">${[["fech","Fechamento do mês"],["lix","Lixeira"+(S.lixeira.length?` (${S.lixeira.length})`:"")],["log","Alterações"],["cfg","Configurações"]].map(([k,l])=>`<button class="tab" data-a="cv" data-v="${k}" aria-pressed="${tab===k}">${l}</button>`).join("")}</div>`;
+  const head=(sub,act="")=>`<div class="head"><div><h1>Controle</h1><p class="sub">${sub}</p></div><div class="actions">${act}</div></div>${tabs}`;
+  if(tab==="lix"){
+    const G=gruposLixeira();
+    return head("Tudo o que foi excluído fica aqui e pode ser restaurado.")+`<section class="panel">${G.length?`<div class="tbl-wrap"><table><thead><tr><th>Excluído em</th><th>Por</th><th>O quê</th><th class="r"></th></tr></thead><tbody>${G.map(g=>`<tr><td class="num">${new Date(g.em).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",year:"2-digit",hour:"2-digit",minute:"2-digit"})}</td><td>${esc(quem(g.por)||g.por||"")}</td>
+      <td>${g.itens.map(i=>`<div class="${i===g.itens[0]?"t":"s"}">${esc(COL_N[i.col]||i.col)} · ${esc(i.resumo||"")}</div>`).join("")}</td><td class="r">${W()?`<button class="btn sm" data-a="lix-rest" data-g="${g.id}">Restaurar${g.itens.length>1?" tudo":""}</button>`:""}</td></tr>`).join("")}</tbody></table></div>`
+      :`<div class="empty"><strong>Lixeira vazia</strong>Quando alguém excluir um contrato, parcela, conta ou cliente, ele aparece aqui.</div>`}</section>`;
+  }
+  if(tab==="log"){
+    const q=norm(UI.lq);const L=S.log.filter(l=>!q||norm([l.resumo,quem(l.por),l.por,COL_N[l.col],l.acao].join(" ")).includes(q));
+    const ac={criou:"criou",alterou:"alterou",excluiu:"excluiu"};
+    return head("Quem criou, alterou ou excluiu cada registro (últimas 300 ações).")+`<div class="toolbar"><input class="search" id="lq" type="search" placeholder="Buscar pessoa, cliente, valor…" value="${esc(UI.lq||"")}" data-q="lq"></div>
+    <section class="panel">${L.length?`<div class="tbl-wrap"><table><thead><tr><th>Quando</th><th>Quem</th><th>Ação</th><th>Registro</th></tr></thead><tbody>${L.map(l=>`<tr><td class="num" style="white-space:nowrap">${new Date(l.em).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}</td><td>${esc(quem(l.por)||l.por||"")}</td>
+      <td><span class="pill ${l.acao==="excluiu"?"p-vencido":l.acao==="criou"?"p-pago":"p-aberto"}">${ac[l.acao]||l.acao}</span></td><td><div class="t">${esc(COL_N[l.col]||l.col)} · ${esc(l.resumo||"")}</div>${(l.mudancas||[]).map(m=>`<div class="s">${esc(m.c)}: ${esc(m.de)} → <b>${esc(m.para)}</b></div>`).join("")}</td></tr>`).join("")}</tbody></table></div>`
+      :`<div class="empty"><strong>Nenhuma alteração registrada</strong>A partir de agora, cada inclusão, alteração e exclusão fica anotada aqui.</div>`}</section>`;
+  }
+  if(tab==="cfg"){
+    const c=S.config;
+    return head("Regras usadas nos cálculos do sistema.",W()?`<button class="btn primary" data-a="cfg-geral">Editar</button>`:"")+`<section class="panel"><div class="panel-b">
+      <p><b>Multa por atraso:</b> ${pctTxt(Number(c.multaPct)||0)} · <b>Juros:</b> ${pctTxt(Number(c.jurosMesPct)||0)} ao mês (proporcional aos dias)</p>
+      <p><b>Comissão padrão:</b> ${pctTxt(Number(c.comissaoPct)||0)} · <b>Base:</b> ${(c.comissaoBase||"fechado")==="recebido"?"valores recebidos no mês":"contratos assinados no mês"}</p>
+      <p class="muted s">A multa e os juros aparecem em “A receber” nas parcelas atrasadas e entram automaticamente na mensagem de cobrança.</p></div></section>`;
+  }
+  // fechamento
+  const ate=S.config.fechadoAte||"";const mesAnt=addDays(todayISO().slice(0,7)+"-01",-1).slice(0,7);
+  const meses=[];for(let i=0;i<12;i++){const d=new Date(todayISO().slice(0,7)+"-15");d.setMonth(d.getMonth()-i);meses.push(d.toISOString().slice(0,7))}
+  const pend=m=>{let tx=0;for(const e of S.extrato)if((e.id||"").endsWith("_"+m))for(const k in (e.t||{}))if(!e.t[k].st||e.t[k].st==="pendente")tx++;
+    const pg=S.pagar.filter(p=>p.status!=="pago"&&p.status!=="cancelado"&&(p.vencimento||"").startsWith(m)).length;
+    const rc=S.receber.filter(p=>p.status!=="pago"&&p.status!=="cancelado"&&(p.vencimento||"").startsWith(m)).length;return {tx,pg,rc}};
+  const hist=(S.config.fechamentos||[]).slice(-6).reverse();
+  return head(ate?`Fechado até <b>${mesNome(ate)}</b>. Lançamentos pagos até lá não podem mais ser alterados.`:"Nenhum mês fechado ainda.",W()?`${ate?`<button class="btn" data-a="reabrir-mes">Reabrir ${mesNome(ate)}</button>`:""}<button class="btn primary" data-a="fechar-mes">Fechar mês</button>`:"")+
+  `<section class="panel"><div class="tbl-wrap"><table><thead><tr><th>Mês</th><th>Situação</th><th>Pendências do mês</th></tr></thead><tbody>${meses.map(m=>{const p=pend(m);const f=ate&&m<=ate;const atual=m===todayISO().slice(0,7);
+    return `<tr><td class="t">${mesNome(m).replace(/^./,c=>c.toUpperCase())}</td><td>${f?`<span class="pill p-pago">Fechado</span>`:atual?`<span class="pill p-aberto">Em andamento</span>`:`<span class="pill p-hoje">Aberto</span>`}</td>
+    <td class="s">${[p.tx&&`${p.tx} movimento(s) do banco sem conciliar`,p.rc&&`${p.rc} recebimento(s) em aberto`,p.pg&&`${p.pg} conta(s) a pagar em aberto`].filter(Boolean).join(" · ")||"—"}</td></tr>`}).join("")}</tbody></table></div></section>
+  ${hist.length?`<p class="muted s" style="margin:10px 2px">${hist.map(h=>`${h.acao==="reabriu"?"Reaberto":"Fechado"} até ${mesNome(h.ate)} por ${esc(quem(h.por)||h.por||"")} em ${new Date(h.em).toLocaleDateString("pt-BR")}`).join("<br>")}</p>`:""}
+  <p class="muted s" style="font-size:12px;margin:10px 2px">Fechar o mês trava recebimentos e pagamentos já baixados naquele mês (e transferências), para o DRE e o que foi passado à contabilidade não mudarem. Contas em aberto continuam podendo ser pagas normalmente. Último mês que pode ser fechado: ${mesNome(mesAnt)}.</p>`;
+}
+function formFechamento(){
+  const ate=S.config.fechadoAte||"";const mesAnt=addDays(todayISO().slice(0,7)+"-01",-1).slice(0,7);
+  const ops=[];for(let i=0;i<12;i++){const d=new Date(mesAnt+"-15");d.setMonth(d.getMonth()-i);const m=d.toISOString().slice(0,7);if(ate&&m<=ate)break;ops.push([m,mesNome(m)])}
+  if(!ops.length){toast("Todos os meses até "+mesNome(mesAnt)+" já estão fechados.");return}
+  openDlg("Fechar mês",SEL("ate","Fechar tudo até",ops,ops[0][0],{full:true})+`<p class="fld full hint" style="margin:0">Depois de fechado, ninguém consegue alterar ou excluir recebimentos, pagamentos e transferências desse período. Se precisar corrigir algo, use “Reabrir”.</p>`,
+   {submit:"Fechar",onSubmit:async fd=>{const m=String(fd.get("ate"));
+     await write(()=>db.doc("config/geral").set({...S.config,fechadoAte:m,fechamentos:[...(S.config.fechamentos||[]),{acao:"fechou",ate:m,por:S.me,em:new Date().toISOString()}],...stamp()}));toast(`Fechado até ${mesNome(m)}`)}});
+}
+async function reabrirMes(){
+  const ate=S.config.fechadoAte;if(!ate)return;const novo=addDays(ate+"-01",-1).slice(0,7);
+  if(!await confirmBox(`Reabrir <b>${mesNome(ate)}</b>? Os lançamentos desse mês voltam a poder ser alterados.`,"Reabrir"))return;
+  await act(()=>db.doc("config/geral").set({...S.config,fechadoAte:novo,fechamentos:[...(S.config.fechamentos||[]),{acao:"reabriu",ate:novo,por:S.me,em:new Date().toISOString()}],...stamp()}),`${mesNome(ate)} reaberto`);
+}
+function formConfigGeral(){
+  const c=S.config;const v=n=>String(Number(n)||0).replace(".",",");
+  openDlg("Configurações",F("multaPct","Multa por atraso (%)",v(c.multaPct),{attrs:'inputmode="decimal"',hint:"Comum: 2%"})+F("jurosMesPct","Juros ao mês (%)",v(c.jurosMesPct),{attrs:'inputmode="decimal"',hint:"Comum: 1% ao mês, proporcional aos dias"})+
+   F("comissaoPct","Comissão padrão (%)",v(c.comissaoPct),{attrs:'inputmode="decimal"',hint:"Vale para quem não tiver percentual próprio"})+
+   SEL("comissaoBase","Comissão calculada sobre",[["fechado","Contratos assinados no mês"],["recebido","Valores recebidos no mês"]],c.comissaoBase||"fechado"),
+   {onSubmit:async fd=>{const n=k=>{const x=Number(String(fd.get(k)||"0").replace(",","."));need(!isNaN(x)&&x>=0&&x<=100,"Percentual inválido.");return x};
+     const o={multaPct:n("multaPct"),jurosMesPct:n("jurosMesPct"),comissaoPct:n("comissaoPct"),comissaoBase:String(fd.get("comissaoBase"))};
+     need(o.multaPct<=2,"Pelo Código de Defesa do Consumidor, a multa por atraso não pode passar de 2%.");
+     await write(()=>db.doc("config/geral").set({...S.config,...o,...stamp()}));toast("Configurações salvas")}});
+}
+
 /* ---------- Orçamentos ---------- */
 const ORC_ST={aberto:"Em elaboração",enviado:"Enviado",negociacao:"Em negociação",fechado:"Fechado",perdido:"Perdido"};
 const ORC_CLS={aberto:"aberto",enviado:"proximo",negociacao:"hoje",fechado:"pago",perdido:"vencido"};
@@ -1940,7 +2141,7 @@ function formOrc(o={}){
       await write(async()=>{
         if(novo){if(!d.numero||d.numero===proxPadrao)d.numero=(await reservar("orcamento",1))[0];const dn=donoPara(d.responsavelId);await garantirDono(dn);await newRef("orcamentos",dn).set({...d,criadoEm:new Date().toISOString(),criadoPor:S.me||null})}
         else{const nd=ADMIN()&&!o.contratoId?donoPara(d.responsavelId):o._o;
-          if(o._o&&nd!==o._o){await garantirDono(nd);await refEm("orcamentos",nd,o.id).set({...strip(o),...d,...stamp()});await docRef("orcamentos",o).delete()}
+          if(o._o&&nd!==o._o){await garantirDono(nd);await refEm("orcamentos",nd,o.id).set({...strip(o),...d,...stamp()});await semLixeira(()=>docRef("orcamentos",o).delete())}
           else await docRef("orcamentos",o).set({...strip(o),...d,...stamp()})}});
       toast(novo?"Orçamento salvo":"Orçamento atualizado");
     }});
@@ -2078,6 +2279,13 @@ document.addEventListener("click",ev=>{
     case "rv":UI.rv=v;render();break;
     case "dm":UI.dm=v;render();break;
     case "dre-csv":exportDRE();break;
+    case "cb":UI.cb=v;render();break;
+    case "com-csv":exportComissoes();break;
+    case "cv":UI.cv=v;render();break;
+    case "lix-rest":restaurarLote(b.dataset.g);break;
+    case "fechar-mes":formFechamento();break;
+    case "reabrir-mes":reabrirMes();break;
+    case "cfg-geral":formConfigGeral();break;
     case "res-det":formResultado(id);break;
     case "edit-conta":formConta(byId(S.contas,id));break;
     case "ajuste":formAjuste(byId(S.contas,id));break;
@@ -2094,6 +2302,9 @@ document.addEventListener("change",ev=>{
   if(el.id==="xall"){const boxes=[...document.querySelectorAll(".xsel")];boxes.forEach(x=>el.checked?S.sel.add(x.dataset.u):S.sel.delete(x.dataset.u));render();return}
   if(el.id==="rc"){UI.rc=el.checked;render();return}
   if(el.id==="dy"){UI.dy=Number(el.value);render();return}
+  if(el.id==="cm"){UI.cm=el.value;render();return}
+  if(el.classList&&el.classList.contains("cpct")){const e=byId(S.equipe,el.dataset.eq);const v=Number(String(el.value).replace(",","."));if(!e||isNaN(v)||v<0||v>100){toast("Percentual inválido");return}
+    act(()=>db.collection("equipe").doc(e.id).set({...strip(e),comissaoPct:v,...stamp()}),`Comissão de ${e.nome}: ${pctTxt(v)}`);return}
   if(["rb","pb","pp","ps","or","cr","rs"].includes(el.id)){UI[el.id]=el.value;render();return}
 });
 document.addEventListener("dragover",ev=>{if(route()!=="conciliacao"||!W())return;ev.preventDefault();const d=document.getElementById("drop");if(d)d.classList.add("on")});
@@ -2146,6 +2357,27 @@ firebase.initializeApp(FIREBASE);
 const auth=firebase.auth();
 db=firebase.firestore();
 db.settings({ignoreUndefinedProperties:true,merge:true});
+(function auditoria(){
+  const DR=firebase.firestore.DocumentReference.prototype;const _set=DR.set,_del=DR.delete;
+  const colDe=p=>p.split("/").slice(-2)[0];const aud=p=>Object.prototype.hasOwnProperty.call(COL_N,colDe(p))&&!p.startsWith("lixeira/")&&!p.startsWith("log/");
+  const ler=async ref=>{try{const s=await ref.get();return s.exists?s.data():null}catch(e){return null}};
+  const registrar=(path,acao,antes,depois)=>{const col=colDe(path);const d=depois||antes;
+    _set.call(db.collection("log").doc(),{path,col,acao,por:S.me||null,em:new Date().toISOString(),resumo:resumoDe(col,d),mudancas:acao==="alterou"?diffDe(antes,depois):[]}).catch(()=>{})};
+  DR.set=async function(d,opt){
+    if(!aud(this.path))return _set.call(this,d,opt);
+    const antes=await ler(this);const depois=opt&&opt.merge?{...(antes||{}),...d}:d;
+    checarFechado(this.path,antes,depois);
+    await _set.call(this,d,opt);
+    if(!semLixeiraN&&!(antes&&!diffDe(antes,depois).length))registrar(this.path,antes?"alterou":"criou",antes,depois);
+  };
+  DR.delete=async function(){
+    if(!aud(this.path))return _del.call(this);
+    const antes=await ler(this);checarFechado(this.path,antes,null);
+    if(antes&&!semLixeiraN){const col=colDe(this.path);await _set.call(db.collection("lixeira").doc(),{path:this.path,col,dados:antes,resumo:resumoDe(col,antes),por:S.me||null,em:new Date().toISOString()})}
+    await _del.call(this);
+    if(antes&&!semLixeiraN)registrar(this.path,"excluiu",antes,null);
+  };
+})();
 const prov=new firebase.auth.GoogleAuthProvider();prov.setCustomParameters({prompt:"select_account"});
 document.getElementById("gateBtn").onclick=async()=>{
   document.getElementById("gateErr").textContent="";
@@ -2198,6 +2430,8 @@ auth.onAuthStateChanged(async u=>{
   for(const t of ["boleto","orcamento"])db.doc("contadores/"+t).onSnapshot(s=>{S.cont[t]=s.exists?s.data():{};agendar()},onErr);
   if(S.role==="admin"){
     ["pagar","extrato","contas","transf","donos"].forEach(simples);
+    db.collection("lixeira").onSnapshot(snap=>{S.lixeira=snap.docs.map(d=>({...d.data(),id:d.id}));agendar()},onErr);
+    db.collection("log").orderBy("em","desc").limit(300).onSnapshot(snap=>{S.log=snap.docs.map(d=>({...d.data(),id:d.id}));agendar()},onErr);
     db.collection("pedidos").onSnapshot(snap=>{S.pedidos=snap.docs.map(d=>({...d.data(),id:d.id}));agendar();const l=document.getElementById("eqList");if(l&&l._redraw)l._redraw()},onErr);
     db.collection("usuarios").onSnapshot(snap=>{S.usuarios=snap.docs.map(d=>({...d.data(),id:d.id}));for(const x of S.usuarios)if(x.nome)S.names[x.id]=x.nome;agendar()},onErr);
     for(const c of PRIV)db.collection(c).onSnapshot(snap=>{(PARTS[c]=PARTS[c]||{})._legado=snap.docs.map(d=>({...d.data(),id:d.id,_c:c,_o:"_legado"}));juntar(c);S.loaded[c]=true;agendar()},onErr);

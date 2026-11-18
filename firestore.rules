@@ -8,6 +8,14 @@ service cloud.firestore {
     function gestao(){ return logado() && (email() == 'financeiro@boscoeventos.com.br' || (temPerfil() && perfil().perfil == 'gestao')); }
     function comercial(){ return logado() && temPerfil() && perfil().perfil == 'comercial'; }
     function membro(){ return gestao() || comercial(); }
+    function minhaPasta(pasta){ return comercial() && pasta == 'eq-' + perfil().equipeId; }
+
+    // Fechamento do mês: lançamentos pagos (ou transferências) até o mês fechado ficam travados
+    function limite(){ return exists(/databases/$(database)/documents/config/geral) ? get(/databases/$(database)/documents/config/geral).data.get('fechadoAte', '0000-00') + '-99' : '0000-00-99'; }
+    function travadoPg(d){ return d.get('status', '') == 'pago' && d.get('pagoEm', '') != '' && d.get('pagoEm', '') < limite(); }
+    function travadoTr(d){ return d.get('data', '') != '' && d.get('data', '') < limite(); }
+    function livrePg(){ return (resource == null || !travadoPg(resource.data)) && (request.resource == null || !travadoPg(request.resource.data)); }
+    function livreTr(){ return (resource == null || !travadoTr(resource.data)) && (request.resource == null || !travadoTr(request.resource.data)); }
 
     match /pedidos/{e} {
       allow read: if logado() && (e == email() || gestao());
@@ -20,7 +28,21 @@ service cloud.firestore {
     match /equipe/{id} { allow read: if membro(); allow write: if gestao(); }
     match /config/{id} { allow read: if membro(); allow write: if gestao(); }
     match /contadores/{id} { allow read, write: if membro(); }
-    match /vendas/{pasta}/{col}/{id} { allow read, write: if gestao() || (comercial() && pasta == 'eq-' + perfil().equipeId); }
-    match /{document=**} { allow read, write: if gestao(); }
+
+    match /vendas/{pasta}/{col}/{id} {
+      allow read: if gestao() || minhaPasta(pasta);
+      allow write: if (gestao() || minhaPasta(pasta)) && (col != 'receber' || livrePg());
+    }
+    match /pagar/{id} { allow read: if gestao(); allow write: if gestao() && livrePg(); }
+    match /transf/{id} { allow read: if gestao(); allow write: if gestao() && livreTr(); }
+
+    // Lixeira e registro de alterações: todos registram, só a gestão consulta; o registro não pode ser apagado
+    match /lixeira/{id} { allow create: if membro() && request.resource.data.por == email(); allow read, delete: if gestao(); }
+    match /log/{id} { allow create: if membro() && request.resource.data.por == email(); allow read: if gestao(); }
+
+    // Demais coleções (bancos, extratos, etc.): só gestão
+    match /{col}/{id} {
+      allow read, write: if gestao() && !(col in ['pedidos','usuarios','equipe','config','contadores','vendas','pagar','transf','lixeira','log']);
+    }
   }
 }
