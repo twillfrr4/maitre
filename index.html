@@ -2008,7 +2008,7 @@ function formEquipe(){
     const eq=equipeOrd(true).map(e=>{const u=acessoDe(e.id);const n=PRIV.reduce((k,c)=>k+S[c].filter(x=>x._o==="eq-"+e.id).length,0);
       return `<div class="eq-row"><span><b>${esc(e.nome)}</b>${e.funcao?` <span class="muted">· ${esc(e.funcao)}</span>`:""}${e.ativo===false?` <span class="muted">(inativo)</span>`:""}
        <span class="s" style="display:block">${u?`${esc(u.id)} · ${PERFIL_N[u.perfil]||u.perfil}`:"sem acesso ao sistema"}${n?` · ${n} registro(s)`:""}</span></span>
-       <span class="row-act">${u?`<button type="button" class="btn sm ghost" data-acdel="${esc(u.id)}">Tirar acesso</button>`:""}<button type="button" class="btn sm ghost" data-eq="${e.id}">${e.ativo===false?"Reativar":"Desativar"}</button></span></div>`}).join("");
+       <span class="row-act">${u?`<select class="btn sm" data-acperf="${esc(u.id)}" aria-label="Perfil de ${esc(e.nome)}" title="Mudar o perfil"><option value="comercial" ${u.perfil==="comercial"?"selected":""}>Comercial</option><option value="gestao" ${u.perfil==="gestao"?"selected":""}>Gestão</option></select><button type="button" class="btn sm ghost" data-acdel="${esc(u.id)}">Tirar acesso</button>`:""}<button type="button" class="btn sm ghost" data-eq="${e.id}">${e.ativo===false?"Reativar":"Desativar"}</button></span></div>`}).join("");
     const ges=S.usuarios.filter(u=>!u.equipeId).sort((a,b)=>a.id.localeCompare(b.id)).map(u=>`<div class="eq-row"><span><b>${esc(u.nome||u.id)}</b> <span class="muted">· Gestão</span><span class="s" style="display:block">${esc(u.id)}</span></span><span class="row-act"><button type="button" class="btn sm ghost" data-acdel="${esc(u.id)}">Tirar acesso</button></span></div>`).join("");
     const pend=S.pedidos.filter(p=>p.status==="pendente").sort((a,b)=>(a.em||"").localeCompare(b.em||""));
     const livres=equipeOrd().filter(e=>!acessoDe(e.id));
@@ -2028,6 +2028,9 @@ function formEquipe(){
       const q=$n(f,"quem");const sync=()=>{const nova=!q.value;for(const k of ["nome","funcao"])$n(f,k).closest(".fld").style.display=(!nova||($n(f,"perfil").value==="gestao-so"&&k==="funcao"))?"none":""};
       q.addEventListener("change",sync);$n(f,"perfil").addEventListener("change",sync);sync();
       const lst=f.querySelector("#eqList");lst._redraw=()=>{lst.innerHTML=lista()};
+      lst.addEventListener("change",async ev=>{const sel=ev.target.closest("[data-acperf]");if(!sel)return;const em=sel.dataset.acperf;const u=S.usuarios.find(x=>x.id===em);if(!u)return;
+        if(em===S.me){showErr("Você não pode mudar o próprio perfil.");sel.value=u.perfil;return}
+        try{await write(()=>db.doc("usuarios/"+em).set({...strip(u),perfil:sel.value,...stamp()}));toast(`${u.nome||em}: agora ${sel.value==="gestao"?"Gestão (vê tudo)":"Comercial (vê só o que é dele)"}`)}catch(er){showErr(er.message);sel.value=u.perfil}});
       lst.addEventListener("click",async ev=>{
       const redraw=()=>setTimeout(()=>{const l=document.getElementById("eqList");if(l)l.innerHTML=lista()},450);
       const ap=ev.target.closest("[data-aprova]"),rc=ev.target.closest("[data-recusa]");
