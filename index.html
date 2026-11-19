@@ -768,12 +768,28 @@ function linhaDDA(cel){ // cel: textos da linha na ordem
   if(/^(benefici|cedente|vencimento|total)/i.test(benef))return null;
   return {benef:benef.trim(),doc:doc.trim(),venc:isoDe(cel[iv]),valor:parseBRL(cel[im].replace(/R\$\s*/,""))};
 }
+function lerDDABlocos(linhas){
+  const out=[];let cur=null;const dig=t=>String(t||"").replace(/\D/g,"");
+  for(const ln of linhas){const t=ln.replace(/\s+/g," ").trim();if(!t)continue;
+    let m=/^(?!Pagador)(.+?)\s+CNPJ\s*([\d./-]{11,20})$/i.exec(t);
+    if(m){cur={benef:m[1].trim(),cnpj:dig(m[2])};continue}
+    m=/^(\S+)\s+(\d{4}-\d{2}-\d{2})\s+(\d{4}-\d{2}-\d{2})\s+(\S+)\s+R\$\s*([\d.]+,\d{2})/.exec(t);
+    if(m&&cur){cur.situacao=m[1];cur.venc=m[3];cur.valor=parseBRL(m[5]);cur.pago=/pag|liquid|baixad/i.test(m[1])||(m[4]!=="-"&&/\d/.test(m[4]));out.push(cur);continue}
+    m=/^(\d{6,})\s+([\d.\s]{40,})$/.exec(t);
+    if(m&&cur&&out[out.length-1]===cur){cur.doc=m[1];cur.linha=m[2].trim()}
+  }
+  return out.filter(x=>!x.pago&&x.venc&&x.valor).map(x=>({benef:x.benef,doc:x.doc||"",venc:x.venc,valor:x.valor,cnpj:x.cnpj,linha:x.linha||""}));
+}
 async function lerDDAArquivo(file){
   if(/\.pdf$/i.test(file.name)||file.type==="application/pdf"){
     await loadScript(PDFJS+"pdf.min.js");await loadScript(PDFJS+"pdf.worker.min.js");
-    const pdf=await window.pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;const out=[];
+    const pdf=await window.pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;const out=[];const pags=[];
     for(let n=1;n<=pdf.numPages;n++){const pg=await pdf.getPage(n);const tc=await pg.getTextContent();
       const L={};for(const it of tc.items){const t=(it.str||"").trim();if(!t)continue;const y=Math.round(it.transform[5]/3);(L[y]=L[y]||[]).push({x:it.transform[4],t})}
+      pags.push(L)}
+    const todas=[];for(const L of pags)for(const y of Object.keys(L).map(Number).sort((a,b)=>b-a))todas.push(L[y].sort((a,b)=>a.x-b.x).map(i=>i.t).join(" "));
+    if(todas.some(l=>/^Pagador:/i.test(l.trim()))){const b=lerDDABlocos(todas);if(b.length)return b}
+    for(const L of pags){
       const ys=Object.keys(L).map(Number).sort((a,b)=>b-a);let col=null;
       for(const y of ys){const it=L[y].sort((a,b)=>a.x-b.x);const txt=it.map(i=>i.t).join(" ");
         if(/benefici|cedente/i.test(txt)&&/venc/i.test(txt)){const f=re=>{const i=it.find(i=>re.test(i.t));return i?i.x:null};col={doc:f(/^(documento|n[ºo°]|nosso)/i),venc:f(/^venc/i)};continue}
@@ -783,7 +799,8 @@ async function lerDDAArquivo(file){
         const x=linhaDDA(cel);if(x)out.push(x)}}
     return out;
   }
-  return lerDDATexto(await file.text());
+  const tx=await file.text();if(/^\s*Pagador:/im.test(tx)){const b=lerDDABlocos(tx.split(/\r?\n/));if(b.length)return b}
+  return lerDDATexto(tx);
 }
 function lerDDATexto(txt){
   const out=[];for(const ln of String(txt||"").split(/\r?\n/)){if(!ln.trim())continue;
@@ -793,7 +810,9 @@ function lerDDATexto(txt){
   return out;
 }
 function chaveDDA(x){return [normF(x.benef),x.doc,x.venc,x.valor].join("|")}
-function fornecedorDDA(benef){
+function fornecedorDDA(benef,cnpj){
+  const dg=t=>String(t||"").replace(/\D/g,"");
+  if(cnpj){const f=S.fornecedores.find(k=>dg(k.doc)===cnpj);if(f)return {nome:f.nome,id:f.id,categoria:f.categoria||""}}
   const b=normF(benef);if(!b)return null;
   const casa=n=>{n=normF(n);return n&&(n===b||(b.length>=12&&n.startsWith(b))||(n.length>=12&&b.startsWith(n)))};
   const f=S.fornecedores.find(k=>casa(k.nome));if(f)return {nome:f.nome,id:f.id,categoria:f.categoria||""};
@@ -822,7 +841,7 @@ function formDDA(){
 }
 function previaDDA(L){
   const ja=new Set(S.pagar.map(p=>p.ddaKey).filter(Boolean));
-  const linhas=L.map((x,i)=>{const k=chaveDDA(x);const f=fornecedorDDA(x.benef);
+  const linhas=L.map((x,i)=>{const k=chaveDDA(x);const f=fornecedorDDA(x.benef,x.cnpj);
     const dup=ja.has(k)||S.pagar.some(p=>p.vencimento===x.venc&&p.valor===x.valor&&f&&normF(p.fornecedor)===normF(f.nome));
     return {...x,i,k,dup,forn:f?f.nome:x.benef,fornId:f?f.id:"",novo:!f,cat:(f&&f.categoria)||categoriaDDA(x.benef)}});
   const novos=linhas.filter(l=>!l.dup);
@@ -847,8 +866,8 @@ function previaDDA(L){
           const nome=f.querySelector(`[data-ddaf="${l.i}"]`).value.trim()||l.benef;const cat=f.querySelector(`[data-ddac="${l.i}"]`).value;const pri=Number(f.querySelector(`[data-ddap="${l.i}"]`).value)||2;
           let fid=l.fornId;const kn=normF(nome);
           if(!fid){const ex=S.fornecedores.find(k=>normF(k.nome)===kn)||cache[kn];
-            if(ex)fid=ex.id;else{const r=db.collection("fornecedores").doc();await r.set({nome,categoria:cat,origem:"DDA",criadoEm:new Date().toISOString(),criadoPor:S.me||null});fid=r.id;cache[kn]={id:r.id};nf++}}
-          await db.collection("pagar").doc().set({fornecedor:nome,fornecedorId:fid,descricao:`Boleto DDA${l.doc?" · doc. "+l.doc:""}`,documento:l.doc,categoria:cat,valor:l.valor,vencimento:l.venc,prioridade:pri,status:"aberto",origem:"DDA",ddaKey:l.k,criadoEm:new Date().toISOString(),criadoPor:S.me||null});
+            if(ex)fid=ex.id;else{const r=db.collection("fornecedores").doc();await r.set({nome,doc:l.cnpj?l.cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,"$1.$2.$3/$4-$5"):"",categoria:cat,origem:"DDA",criadoEm:new Date().toISOString(),criadoPor:S.me||null});fid=r.id;cache[kn]={id:r.id};nf++}}
+          await db.collection("pagar").doc().set({fornecedor:nome,fornecedorId:fid,descricao:`Boleto DDA${l.doc?" · doc. "+l.doc:""}`,documento:l.doc,linhaDigitavel:l.linha||"",cnpjBenef:l.cnpj||"",categoria:cat,valor:l.valor,vencimento:l.venc,prioridade:pri,status:"aberto",origem:"DDA",ddaKey:l.k,criadoEm:new Date().toISOString(),criadoPor:S.me||null});
         }});
       dlg.style.maxWidth="";dlg.style.width="";
       toast(`${sel.length} boleto(s) lançado(s) em A pagar${nf?` · ${nf} fornecedor(es) novo(s) cadastrado(s)`:""}`);
@@ -861,7 +880,7 @@ function vPagar(){
   const body=list.length?`<div class="tbl-wrap"><table><thead><tr><th>Vencimento</th><th>Fornecedor / descrição</th><th>Categoria</th><th class="r">Valor</th><th>Situação</th><th class="r"></th></tr></thead><tbody>${list.map(x=>{const st=status(x);
     return `<tr class="${rowCls(st)}"><td class="num">${fmtD(x.vencimento)}</td><td><div class="t">${esc(x.fornecedor)} ${prioTag(x.prioridade)}</div><div class="s">${esc(x.descricao||"")}</div>${x.contratoId?`<div style="margin-top:3px">${evtTag(x.contratoId)}</div>`:""}</td><td>${esc(x.categoria||"")}</td><td class="r num">${brl(x.valor)}</td>
     <td>${pill(st)}${st==="pago"?`<div class="s">${fmtD(x.pagoEm)}${x.comprovanteId?" · "+comprovanteLink(x):""}</div>`:""}${metaPg(x)}</td>
-    <td class="r"><div class="row-act">${W()&&x.status!=="pago"?`<button class="btn sm primary" data-a="pagar-desp" data-id="${x.id}">Marcar pago</button>`:""}${W()&&x.status==="pago"?`<button class="btn sm ghost" data-a="desfazer-desp" data-id="${x.id}">Desfazer</button>`:""}${W()?`<button class="btn sm ghost" data-a="edit-desp" data-id="${x.id}">Editar</button>`:""}</div></td></tr>`}).join("")}</tbody></table></div>`
+    <td class="r"><div class="row-act">${x.linhaDigitavel&&x.status!=="pago"?`<button class="btn sm ghost" data-a="copiar-linha" data-id="${x.id}" title="${esc(x.linhaDigitavel)}">Copiar código</button>`:""}${W()&&x.status!=="pago"?`<button class="btn sm primary" data-a="pagar-desp" data-id="${x.id}">Marcar pago</button>`:""}${W()&&x.status==="pago"?`<button class="btn sm ghost" data-a="desfazer-desp" data-id="${x.id}">Desfazer</button>`:""}${W()?`<button class="btn sm ghost" data-a="edit-desp" data-id="${x.id}">Editar</button>`:""}</div></td></tr>`}).join("")}</tbody></table></div>`
    :`<div class="empty"><strong>${S.pagar.length?"Nada neste filtro":"Nenhuma conta a pagar cadastrada"}</strong>${S.pagar.length?"":"Registre fornecedores, folha, aluguel e impostos para ver o saldo previsto no painel."}${W()&&!S.pagar.length?`<button class="btn primary" data-a="nova-despesa">+ Cadastrar conta a pagar</button>`:""}</div>`;
   return `<div class="head"><div><h1>A pagar</h1><p class="sub">Fornecedores, equipe, contas fixas e impostos.</p></div><div class="actions"><button class="btn" data-a="csv" data-v="pagar">Exportar planilha</button>${W()?`<button class="btn" data-a="dda">Importar DDA</button><button class="btn primary" data-a="nova-despesa">+ Conta a pagar</button>`:""}</div></div>
   <div class="toolbar"><div class="chips">${chipsFor("pf",UI.pf,S.pagar)}</div><div class="chips"><select class="search" style="width:auto" id="pp" aria-label="Prioridade"><option value="">Todas as prioridades</option>${[1,2,3].map(n=>`<option value="${n}" ${UI.pp===String(n)?"selected":""}>${n} · ${PRIO[n]}</option>`).join("")}</select><select class="search" style="width:auto" id="ps" aria-label="Ordenar"><option value="venc" ${UI.ps==="venc"?"selected":""}>Ordenar por vencimento</option><option value="prio" ${UI.ps==="prio"?"selected":""}>Ordenar por prioridade</option></select>${bankFilter("pb")}<input class="search" id="pq" type="search" placeholder="Buscar fornecedor ou categoria" value="${esc(UI.pq)}" data-q="pq"></div></div>
@@ -2563,6 +2582,7 @@ document.addEventListener("click",ev=>{
     case "cb":UI.cb=v;render();break;
     case "kt":UI.kt=v;UI.kq="";render();break;
     case "dda":formDDA();break;
+    case "copiar-linha":{const x=byId(S.pagar,id);if(x&&x.linhaDigitavel){const t=x.linhaDigitavel.replace(/\D/g,"");(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast("Código de barras copiado"),()=>prompt("Copie o código:",t))}break}
     case "novo-forn":formFornecedor();break;
     case "edit-forn":formFornecedor(byId(S.fornecedores,id));break;
     case "forn-importar":importarFornecedores();break;
