@@ -307,6 +307,8 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
 .gate-err{color:var(--danger,#b42318);font-size:13px;margin-top:12px;min-height:1em}
 .who-out{margin-left:6px}
 [hidden]{display:none!important}
+.ass-box{border:1px dashed var(--line);border-radius:10px;padding:10px 12px;font-size:13.5px}.ass-box.pend{border-color:var(--warn,#c08a2b);background:color-mix(in srgb,var(--warn,#c08a2b) 8%,transparent)}.ass-box.ok{border-color:var(--ok,#2f8a5b);color:var(--ok,#2f8a5b)}
+.chk{display:flex;gap:8px;align-items:center;cursor:pointer}
 .emp-bar{display:flex;justify-content:flex-end;align-items:center;gap:10px;margin:-6px 0 8px}.emp-sel{width:auto;min-width:200px}
 .avisos{margin-bottom:16px}.av{padding:12px 16px;border-top:1px solid var(--line)}
 .av-h{display:flex;gap:10px;align-items:flex-start}.av-i{font-size:18px;line-height:1.2}.av-t{flex:1;display:flex;flex-direction:column;gap:2px}.av-t .s{color:var(--muted);font-size:12.5px}
@@ -474,7 +476,8 @@ function banner(){
   if(ADMIN()&&legado())return `<div class="banner"><b>Atualização de segurança:</b> ${legado()} registro(s) de orçamentos, contratos, clientes e parcelas precisam ser organizados por responsável para que cada vendedor veja só os seus. <button class="btn sm primary" data-a="migrar">Organizar agora</button></div>`;
   if(S.avisoLimite)return `<div class="banner">Há vendedores demais para acompanhar ao mesmo tempo; alguns registros podem não aparecer. Recarregue a página.</div>`;
   const np=ADMIN()?S.pedidos.filter(p=>p.status==="pendente").length:0;
-  if(np)return `<div class="banner"><b>${np} pedido(s) de acesso</b> aguardando sua aprovação. <button class="btn sm primary" data-a="equipe">Ver pedidos</button></div>`;
+  const na=ADMIN()?S.contratos.filter(c=>c.assinatura&&c.assinatura.status==="pendente"&&c.status!=="cancelado").length:0;
+  if(np||na)return `${na?`<div class="banner">✍️ <b>${na} contrato(s)</b> aguardando sua assinatura. <button class="btn sm primary" data-a="ver-assinar">Ver contratos</button></div>`:""}${np?`<div class="banner"><b>${np} pedido(s) de acesso</b> aguardando sua aprovação. <button class="btn sm primary" data-a="equipe">Ver pedidos</button></div>`:""}`;
   if(!S.canWrite)return `<div class="banner">Você tem acesso só de leitura. Peça ao financeiro para liberar seu acesso.</div>`;
   return "";
 }
@@ -574,6 +577,10 @@ function montarAlertas(D,hoje){
   // 6. pedidos de acesso
   const ped=(D.pedidos||[]).filter(p=>p.status==="pendente");
   sec(G,{id:"pedidos",icone:"👤",titulo:"Pedidos de acesso",nivel:"media",rota:"orcamentos",resumo:`${ped.length} aguardando aprovação`,itens:ped.map(p=>({t:`${p.nome||p.id} · ${p.id}`,s:p.funcao||""}))});
+  // 6b. contratos aguardando assinatura da gestão
+  const assP=(D.contratos||[]).filter(c=>c.status!=="cancelado"&&c.assinatura&&c.assinatura.status==="pendente").sort((a,b)=>(a.assinatura.pedidoEm||"").localeCompare(b.assinatura.pedidoEm||""));
+  sec(G,{id:"assinar",icone:"✍️",titulo:"Contratos aguardando sua assinatura",nivel:"alta",rota:"contratos",resumo:`${assP.length} contrato(s) para assinar`,
+    itens:assP.map(c=>({t:`${c.evento} · ${cli(c.clienteId)}${c.dataEvento?" · evento "+dt(c.dataEvento):""}`,s:`pedido por ${resp(c.responsavelId)||"comercial"} em ${dt((c.assinatura.pedidoEm||"").slice(0,10))}`,v:brlA(c.valorTotal),alerta:dias((c.assinatura.pedidoEm||hoje).slice(0,10),hoje)>=2}))});
   // 7. alterações sensíveis (últimas 24h)
   const desde=new Date(new Date(hoje+"T08:00:00").getTime()-864e5).toISOString();const nomeP=e=>{const u=(D.usuarios||[]).find(u=>u.id===e);return (u&&u.nome)||e||"alguém"};
   const sens=(D.log||[]).filter(l=>(l.em||"")>=desde&&((l.acao==="excluiu"&&["contratos","receber","pagar","clientes"].includes(l.col))||(l.acao==="alterou"&&l.col==="contratos"&&(l.mudancas||[]).some(m=>m.c==="valor total"))||(l.acao==="alterou"&&l.col==="config"&&(l.mudancas||[]).some(m=>m.c==="fechado até"))));
@@ -610,6 +617,12 @@ function montarAlertas(D,hoje){
     const evv=(D.contratos||[]).filter(c=>donoDe(c)===e.id&&c.status!=="cancelado"&&c.dataEvento>=hoje&&c.dataEvento<=addD(hoje,15)).map(c=>({c,ab:R.filter(r=>r.contratoId===c.id)})).filter(o=>o.ab.length);
     sec(L,{id:"eventosv",icone:"📅",titulo:"Eventos dos seus clientes com parcela em aberto",nivel:"alta",rota:"contratos",resumo:`${evv.length} evento(s) nos próximos 15 dias`,
       itens:evv.map(o=>({t:`${dt(o.c.dataEvento)} · ${o.c.evento} · ${cli(o.c.clienteId)}`,v:brlA(soma(o.ab)),alerta:true}))});
+    const ass=(D.contratos||[]).filter(c=>donoDe(c)===e.id&&c.assinatura&&c.assinatura.status==="assinado"&&(c.assinatura.assinadoEm||"").slice(0,10)>=addD(hoje,-3));
+    sec(L,{id:"assinados",icone:"✅",titulo:"Contratos assinados pela gestão",nivel:"info",rota:"contratos",resumo:`${ass.length} pronto(s) para enviar ao cliente`,
+      itens:ass.map(c=>({t:`${c.evento} · ${cli(c.clienteId)}`,s:"assinado em "+dt((c.assinatura.assinadoEm||"").slice(0,10))}))});
+    const espera=(D.contratos||[]).filter(c=>donoDe(c)===e.id&&c.status!=="cancelado"&&c.assinatura&&c.assinatura.status==="pendente");
+    sec(L,{id:"esperando",icone:"⏳",titulo:"Aguardando assinatura da gestão",nivel:"info",rota:"contratos",resumo:`${espera.length} contrato(s)`,
+      itens:espera.map(c=>({t:`${c.evento} · ${cli(c.clienteId)}`,s:"pedido em "+dt((c.assinatura.pedidoEm||"").slice(0,10))}))});
     if(L.length)V[e.id]=L;
   }
   return {gestao:G,vendedores:V};
@@ -723,20 +736,45 @@ function drawChart(){
 }
 
 /* ---------- Contratos ---------- */
+const selAss=c=>{const a=c.assinatura;if(!a||!a.status||c.status==="cancelado")return "";
+  return a.status==="pendente"?` <button class="pill p-hoje" style="border:0;cursor:pointer" data-a="docs" data-v="contratos" data-id="${c.id}" title="Pedido por ${esc(quem(a.pedidoPor)||"")} em ${fmtD((a.pedidoEm||"").slice(0,10))}">✍️ Aguardando assinatura</button>`
+   :` <span class="pill p-pago" title="Assinado por ${esc(quem(a.assinadoPor)||"")} em ${fmtD((a.assinadoEm||"").slice(0,10))}">✓ Assinado</span>`};
+function blocoAssinatura(c,novo){
+  const a=(c&&c.assinatura)||{};
+  if(a.status==="assinado")return `<div class="fld full ass-box ok">✓ <b>Contrato assinado</b> por ${esc(quem(a.assinadoPor)||a.assinadoPor||"")} em ${fmtD((a.assinadoEm||"").slice(0,10))}.</div>`;
+  if(a.status==="pendente"&&ADMIN())return `<div class="fld full ass-box pend"><b>✍️ Aguardando a sua assinatura</b> · pedido por ${esc(quem(a.pedidoPor)||a.pedidoPor||"")} em ${fmtD((a.pedidoEm||"").slice(0,10))}
+    <ol style="margin:6px 0 6px 18px;padding:0"><li>Baixe o contrato na lista acima.</li><li>Assine (à mão e digitalize, ou pelo gov.br / certificado digital).</li><li>Use <b>Anexar</b> para enviar a versão assinada e clique em Salvar.</li></ol>
+    <label class="chk"><input type="checkbox" name="assinado" id="f_assinado"> Já assinei e anexei a versão assinada</label></div>`;
+  if(a.status==="pendente")return `<div class="fld full ass-box pend">⏳ <b>Aguardando assinatura da gestão</b> desde ${fmtD((a.pedidoEm||"").slice(0,10))}. Você será avisado(a) quando estiver assinado.
+    <label class="chk" style="margin-top:6px"><input type="checkbox" name="pedeAss" checked> Manter pedido de assinatura</label></div>`;
+  return `<div class="fld full ass-box"><label class="chk"><input type="checkbox" name="pedeAss" ${!ADMIN()&&novo!==false?"checked":""}> <b>Precisa da assinatura da gestão</b> <span class="muted s">· a gestão recebe um aviso para baixar, assinar e anexar a versão assinada</span></label></div>`;
+}
+function assinaturaNova(c,fd,listaAntes,lista){
+  const a=(c&&c.assinatura)||null;const agora=new Date().toISOString();
+  if(a&&a.status==="assinado")return {assinatura:a,lista};
+  if(ADMIN()&&a&&a.status==="pendente"&&fd.get("assinado")){
+    need(lista.length>listaAntes,"Anexe a versão assinada do contrato antes de marcar como assinado.");
+    return {assinatura:{...a,status:"assinado",assinadoPor:S.me||null,assinadoEm:agora},lista:lista.map((x,i)=>i>=listaAntes?{...x,assinado:true}:x)};
+  }
+  if(fd.get("pedeAss"))return {assinatura:a&&a.status==="pendente"?a:{status:"pendente",pedidoPor:S.me||null,pedidoEm:agora},lista};
+  return {assinatura:a&&a.status==="pendente"&&!ADMIN()?null:(a&&a.status==="pendente"?a:null),lista};
+}
 function vContratos(){
   const t=todayISO(),q=norm(UI.cq);
   let list=S.contratos.slice();
   if(UI.cf==="proximos")list=list.filter(c=>c.status!=="cancelado"&&c.dataEvento>=t);
   if(UI.cf==="realizados")list=list.filter(c=>c.status!=="cancelado"&&c.dataEvento<t);
   if(UI.cf==="cancelados")list=list.filter(c=>c.status==="cancelado");
+  if(UI.cf==="assinar")list=list.filter(c=>c.assinatura&&c.assinatura.status==="pendente"&&c.status!=="cancelado");
   if(q)list=list.filter(c=>norm(c.evento+" "+clienteNome(c.clienteId)+" "+(c.local||"")).includes(q));
   if(UI.cr)list=list.filter(c=>c.responsavelId===UI.cr);
   list.sort((a,b)=>UI.cf==="proximos"?a.dataEvento.localeCompare(b.dataEvento):b.dataEvento.localeCompare(a.dataEvento));
-  const chips=[["proximos","Próximos eventos"],["realizados","Realizados"],["cancelados","Cancelados"],["todos","Todos"]].map(([k,l])=>`<button class="chip" data-a="cf" data-v="${k}" aria-pressed="${UI.cf===k}">${l}</button>`).join("");
+  const nAss=S.contratos.filter(c=>c.assinatura&&c.assinatura.status==="pendente"&&c.status!=="cancelado").length;
+  const chips=[["proximos","Próximos eventos"],["assinar",`Aguardando assinatura${nAss?` (${nAss})`:""}`],["realizados","Realizados"],["cancelados","Cancelados"],["todos","Todos"]].map(([k,l])=>`<button class="chip" data-a="cf" data-v="${k}" aria-pressed="${UI.cf===k}">${l}</button>`).join("");
   const body=list.length?`<div class="tbl-wrap"><table><thead><tr><th>Evento</th><th>Data</th><th class="r">Valor</th><th>Entrada</th><th>Quitação</th><th class="r"></th></tr></thead><tbody>${list.map(c=>{
     const ps=S.receber.filter(r=>r.contratoId===c.id);const e=ps.find(p=>p.tipo==="entrada"),qq=ps.find(p=>p.tipo==="quitacao");
     const pago=ps.filter(p=>p.status==="pago").reduce((s,p)=>s+(p.valorPago??p.valor),0);
-    return `<tr><td><div class="t">${esc(c.evento)} ${respTag(c.responsavelId)}${c.status==="cancelado"?` <span class="pill p-cancelado" style="text-decoration:none">Cancelado</span>`:""}</div>${c.cancelamento?`<div class="s">Recebido ${brl(c.cancelamento.recebido)} · devolvido ${brl(c.cancelamento.devolvido)} · retido ${brl(c.cancelamento.retido)}${c.cancelamento.motivo?" · "+esc(c.cancelamento.motivo):""}</div>`:""}<div class="s">${esc(clienteNome(c.clienteId)||"Cliente removido")}${c.local?" · "+esc(c.local):""}${c.convidados?" · "+esc(c.convidados)+" convidados":""}</div></td>
+    return `<tr><td><div class="t">${esc(c.evento)} ${respTag(c.responsavelId)}${selAss(c)}${c.status==="cancelado"?` <span class="pill p-cancelado" style="text-decoration:none">Cancelado</span>`:""}</div>${c.cancelamento?`<div class="s">Recebido ${brl(c.cancelamento.recebido)} · devolvido ${brl(c.cancelamento.devolvido)} · retido ${brl(c.cancelamento.retido)}${c.cancelamento.motivo?" · "+esc(c.cancelamento.motivo):""}</div>`:""}<div class="s">${esc(clienteNome(c.clienteId)||"Cliente removido")}${c.local?" · "+esc(c.local):""}${c.convidados?" · "+esc(c.convidados)+" convidados":""}</div></td>
     <td class="num">${fmtD(c.dataEvento)}</td><td class="r"><div class="num">${brl(c.valorTotal)}</div>${c.aditivos&&c.aditivos.length?`<div class="s">${c.aditivos.length} aditivo(s)</div>`:""}<div class="s num">recebido ${brl(pago)}</div></td>
     <td>${e?pill(status(e))+`<div class="s num">${brl(e.valor)} · ${fmtD(e.vencimento)}</div>`:"—"}</td>
     <td>${qq?pill(status(qq))+`<div class="s num">${brl(qq.valor)} · ${fmtD(qq.vencimento)}</div>`:"—"}</td>
@@ -1070,7 +1108,7 @@ function formContrato(c={},preCliente){
    (novo||c.status==="cancelado"?"":`<div class="fld full cancel" id="cancelBox" hidden><p style="margin:0">Já recebido deste contrato: <b class="num">${brl(ps.filter(p=>p.status==="pago").reduce((a,p)=>a+((p.valorPago??p.valor)||0),0))}</b>. As parcelas em aberto serão canceladas.</p>
      <div class="lead-g">${F("motivoCanc","Motivo do cancelamento","",{full:true})}${ADMIN()?F("devolver","Devolver ao cliente (R$)","0,00",{attrs:'inputmode="decimal"',hint:"O que não for devolvido fica como retido (multa/sinal)"})+F("dataDev","Data da devolução",addDays(todayISO(),7),{type:"date"}):`<p class="hint fld full" style="margin:0">Se houver devolução, a gestão registra.</p>`}</div></div>`)+
    (c.aditivos&&c.aditivos.length?`<div class="fld full"><span class="lbl-like">Aditivos</span>${c.aditivos.map(a=>`<div class="s" style="padding:4px 0;border-bottom:1px solid var(--line)"><b class="num">${a.valor>=0?"+":"−"} ${brl(Math.abs(a.valor))}</b> · ${fmtD(a.data)} · ${esc(a.descricao)}${a.convidadosDepois?` · ${a.convidadosAntes||"?"}→${a.convidadosDepois} convidados`:""} <span class="muted">(${a.cobranca==="nova"?"parcela nova":"na quitação"})</span></div>`).join("")}<span class="hint">Valor original do contrato: ${brl(c.valorOriginal??c.valorTotal)}</span></div>`:"")+
-   TA("obs","Observações",c.obs)+anexosField("Contrato em PDF ou Word"),
+   TA("obs","Observações",c.obs)+anexosField("Contrato em PDF ou Word")+(c.status!=="cancelado"?blocoAssinatura(c,novo):""),
    {registro:c,submit:novo?"Salvar e gerar parcelas":"Salvar",extra:!novo&&c.status!=="cancelado"&&W()?`<button type="button" class="btn" id="btnAditivo">+ Aditivo</button>`:"",
     danger:novo?null:{label:"Excluir",fn:async()=>{
       const pagos=ps.filter(p=>p.status==="pago").length;
@@ -1098,6 +1136,8 @@ function formContrato(c={},preCliente){
         convidados:fd.get("convidados")?Number(fd.get("convidados")):null,dataAssinatura:String(fd.get("dataAssinatura")||""),valorTotal:parseBRL(fd.get("valorTotal")),
         pctEntrada:Number(fd.get("pctEntrada")),obs:String(fd.get("obs")||"").trim(),contaRec:fd.has("contaRec")?String(fd.get("contaRec")||""):(c.contaRec||""),responsavelId:String(fd.get("responsavelId")||""),orcamentoId:c.orcamentoId||null,anexos,status:String(fd.get("status")||c.status||"ativo")};
       need(o.clienteId,"Selecione o cliente.");need(o.evento,"Informe o nome do evento.");need(o.dataEvento,"Informe a data do evento.");
+      if(o.status!=="cancelado"){const _as=assinaturaNova(c,fd,(c.anexos||[]).length,anexos);o.assinatura=_as.assinatura;o.anexos=_as.lista;
+        if(o.assinatura&&o.assinatura.status==="pendente"&&!(c.assinatura&&c.assinatura.status==="pendente"))need(o.anexos.length,"Anexe o contrato (PDF ou Word) para a gestão poder assinar, ou desmarque “Precisa da assinatura da gestão”.")}
       need(!isNaN(o.valorTotal)&&o.valorTotal>0,"Informe o valor total (ex.: 25.000,00).");need(o.pctEntrada>=0&&o.pctEntrada<=100,"Percentual de entrada inválido.");
       const ativos=ps.filter(p=>p.status!=="cancelado");
       const jaPago=ativos.filter(p=>p.status==="pago").reduce((a,p)=>a+((p.valorPago??p.valor)||0),0);
@@ -1950,7 +1990,7 @@ document.addEventListener("click",ev=>{const b=ev.target.closest("[data-blob]");
 function anexoItem(a,{remover=false,idx=0}={}){
   const tipo=(a.ext||"arq").toUpperCase().slice(0,4);const pk=a.empacotado?"1":"0";const vis=!a.empacotado&&["pdf","png","jpg","jpeg","webp","gif"].includes(a.ext);
   const at=m=>`data-blob="${esc(a.id)}" data-nome="${esc(a.nome)}" data-pack="${pk}" data-mode="${m}"`;
-  return `<div class="anx"><span class="anx-t anx-${esc((a.ext||"").replace(/[^a-z]/g,""))}">${esc(tipo)}</span><span class="anx-n"><button type="button" class="lnk" ${at(vis?"ver":"baixar")}>${esc(a.nome)}</button><span class="s">${tamanho(a.tamanho||0)} · ${fmtD((a.enviadoEm||"").slice(0,10))}${quem(a.por)?" · "+quem(a.por):""}</span></span>${vis?`<button type="button" class="btn sm ghost" ${at("ver")}>Ver</button>`:""}<button type="button" class="btn sm ghost" ${at("baixar")}>Baixar</button>${remover?`<button type="button" class="btn sm ghost danger" data-anx-del="${idx}" aria-label="Remover ${esc(a.nome)}">Remover</button>`:""}</div>`;
+  return `<div class="anx"><span class="anx-t anx-${esc((a.ext||"").replace(/[^a-z]/g,""))}">${esc(tipo)}</span><span class="anx-n"><button type="button" class="lnk" ${at(vis?"ver":"baixar")}>${esc(a.nome)}</button>${a.assinado?` <span class="pill p-pago" style="font-size:11px">✓ assinado</span>`:""}<span class="s">${tamanho(a.tamanho||0)} · ${fmtD((a.enviadoEm||"").slice(0,10))}${quem(a.por)?" · "+quem(a.por):""}</span></span>${vis?`<button type="button" class="btn sm ghost" ${at("ver")}>Ver</button>`:""}<button type="button" class="btn sm ghost" ${at("baixar")}>Baixar</button>${remover?`<button type="button" class="btn sm ghost danger" data-anx-del="${idx}" aria-label="Remover ${esc(a.nome)}">Remover</button>`:""}</div>`;
 }
 /* campo de anexos dentro de um formulário: lista viva + botão de envio */
 function anexosField(titulo){
@@ -1965,7 +2005,7 @@ function bindAnexos(f,lista){
     const files=[...inp.files];inp.value="";
     for(const file of files){
       if(msg)msg.textContent=`Enviando ${file.name}…`;
-      try{lista.push(await enviarAnexo(file));draw();if(msg)msg.textContent=`${file.name} anexado. Clique em Salvar para gravar.`}
+      try{lista.push(await enviarAnexo(file));draw();if(msg)msg.textContent=`${file.name} anexado. Clique em Salvar para gravar.`;const de=document.getElementById("derr");if(de)de.hidden=true}
       catch(e){showErr(e.message&&!e.code?e.message:`Não foi possível enviar ${file.name} (${e.code||"erro"}).`)}
     }
   });
@@ -1981,9 +2021,16 @@ function formDocs(col,id){
   const k=col==="orcamentos"&&x.contratoId?byId(S.contratos,x.contratoId):null;
   const rel=orc&&(orc.anexos||[]).length?`<div class="fld full"><span class="lbl-like">Do orçamento ${esc(orc.numero||"")}</span><div class="anx-box" id="relBox">${orc.anexos.map(a=>anexoItem(a)).join("")}</div></div>`
     :k&&(k.anexos||[]).length?`<div class="fld full"><span class="lbl-like">Do contrato</span><div class="anx-box" id="relBox">${k.anexos.map(a=>anexoItem(a)).join("")}</div></div>`:"";
-  openDlg(`Documentos · ${esc(col==="contratos"?x.evento:(x.numero||"")+" "+orcNome(x))}`,anexosField(col==="contratos"?"Contrato assinado e outros documentos":"Orçamento enviado e outros documentos")+rel,
-   {submit:W()?"Salvar":"",onOpen:f=>{bindAnexos(f,lista)},
-    onSubmit:async()=>{const atual=byId(S[col],id)||x;await write(()=>docRef(col,atual).set({...strip(atual),anexos:lista,...stamp()}));toast("Documentos salvos")}});
+  const n0=lista.length;
+  openDlg(`Documentos · ${esc(col==="contratos"?x.evento:(x.numero||"")+" "+orcNome(x))}`,anexosField(col==="contratos"?"Contrato e outros documentos":"Orçamento enviado e outros documentos")+rel+(col==="contratos"&&x.status!=="cancelado"?blocoAssinatura(x,false):""),
+   {submit:W()?"Salvar":"",onOpen:f=>{bindAnexos(f,lista);const inp=f.querySelector("#anxIn");const ck=f.querySelector("#f_assinado"),pk=f.querySelector('[name="pedeAss"]');
+      if(inp&&(ck||(pk&&!ADMIN())))inp.addEventListener("change",()=>{const t=setInterval(()=>{if(lista.length>n0){clearInterval(t);const b=ck||pk;b.checked=true;const box=b.closest(".ass-box");if(box){box.classList.add("pend");box.scrollIntoView({block:"nearest"})}}},400);setTimeout(()=>clearInterval(t),20000)})},
+    onSubmit:async fd=>{const atual=byId(S[col],id)||x;let extra={},L=lista,msg="Documentos salvos";
+      if(col==="contratos"&&atual.status!=="cancelado"){const r=assinaturaNova(atual,fd,n0,lista);L=r.lista;extra={assinatura:r.assinatura};
+        const a0=atual.assinatura&&atual.assinatura.status,a1=r.assinatura&&r.assinatura.status;
+        if(a1==="pendente"&&a0!=="pendente")msg="Documentos salvos · a gestão foi avisada para assinar";if(a1==="assinado"&&a0!=="assinado")msg="Contrato marcado como assinado ✓";
+        if(!L.length&&a1==="pendente")need(false,"Anexe o contrato para a gestão poder assinar.")}
+      await write(()=>docRef(col,atual).set({...strip(atual),anexos:L,...extra,...stamp()}));toast(msg)}});
 }
 const docsBtn=(col,x)=>{const n=(x.anexos||[]).length;return `<button class="btn sm ghost docs-btn" data-a="docs" data-v="${col}" data-id="${x.id}" title="Documentos">${clipIco}${n?` ${n}`:""}</button>`};
 
@@ -2615,6 +2662,7 @@ document.addEventListener("click",ev=>{
     case "cb":UI.cb=v;render();break;
     case "kt":UI.kt=v;UI.kq="";render();break;
     case "dda":formDDA();break;
+    case "ver-assinar":UI.cf="assinar";location.hash="contratos";render();break;
     case "copiar-linha":{const x=byId(S.pagar,id);if(x&&x.linhaDigitavel){const t=x.linhaDigitavel.replace(/\D/g,"");(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast("Código de barras copiado"),()=>prompt("Copie o código:",t))}break}
     case "novo-forn":formFornecedor();break;
     case "edit-forn":formFornecedor(byId(S.fornecedores,id));break;

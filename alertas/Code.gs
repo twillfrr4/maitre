@@ -111,6 +111,10 @@ function montarAlertas(D,hoje){
   // 6. pedidos de acesso
   const ped=(D.pedidos||[]).filter(p=>p.status==="pendente");
   sec(G,{id:"pedidos",icone:"👤",titulo:"Pedidos de acesso",nivel:"media",rota:"orcamentos",resumo:`${ped.length} aguardando aprovação`,itens:ped.map(p=>({t:`${p.nome||p.id} · ${p.id}`,s:p.funcao||""}))});
+  // 6b. contratos aguardando assinatura da gestão
+  const assP=(D.contratos||[]).filter(c=>c.status!=="cancelado"&&c.assinatura&&c.assinatura.status==="pendente").sort((a,b)=>(a.assinatura.pedidoEm||"").localeCompare(b.assinatura.pedidoEm||""));
+  sec(G,{id:"assinar",icone:"✍️",titulo:"Contratos aguardando sua assinatura",nivel:"alta",rota:"contratos",resumo:`${assP.length} contrato(s) para assinar`,
+    itens:assP.map(c=>({t:`${c.evento} · ${cli(c.clienteId)}${c.dataEvento?" · evento "+dt(c.dataEvento):""}`,s:`pedido por ${resp(c.responsavelId)||"comercial"} em ${dt((c.assinatura.pedidoEm||"").slice(0,10))}`,v:brlA(c.valorTotal),alerta:dias((c.assinatura.pedidoEm||hoje).slice(0,10),hoje)>=2}))});
   // 7. alterações sensíveis (últimas 24h)
   const desde=new Date(new Date(hoje+"T08:00:00").getTime()-864e5).toISOString();const nomeP=e=>{const u=(D.usuarios||[]).find(u=>u.id===e);return (u&&u.nome)||e||"alguém"};
   const sens=(D.log||[]).filter(l=>(l.em||"")>=desde&&((l.acao==="excluiu"&&["contratos","receber","pagar","clientes"].includes(l.col))||(l.acao==="alterou"&&l.col==="contratos"&&(l.mudancas||[]).some(m=>m.c==="valor total"))||(l.acao==="alterou"&&l.col==="config"&&(l.mudancas||[]).some(m=>m.c==="fechado até"))));
@@ -147,6 +151,12 @@ function montarAlertas(D,hoje){
     const evv=(D.contratos||[]).filter(c=>donoDe(c)===e.id&&c.status!=="cancelado"&&c.dataEvento>=hoje&&c.dataEvento<=addD(hoje,15)).map(c=>({c,ab:R.filter(r=>r.contratoId===c.id)})).filter(o=>o.ab.length);
     sec(L,{id:"eventosv",icone:"📅",titulo:"Eventos dos seus clientes com parcela em aberto",nivel:"alta",rota:"contratos",resumo:`${evv.length} evento(s) nos próximos 15 dias`,
       itens:evv.map(o=>({t:`${dt(o.c.dataEvento)} · ${o.c.evento} · ${cli(o.c.clienteId)}`,v:brlA(soma(o.ab)),alerta:true}))});
+    const ass=(D.contratos||[]).filter(c=>donoDe(c)===e.id&&c.assinatura&&c.assinatura.status==="assinado"&&(c.assinatura.assinadoEm||"").slice(0,10)>=addD(hoje,-3));
+    sec(L,{id:"assinados",icone:"✅",titulo:"Contratos assinados pela gestão",nivel:"info",rota:"contratos",resumo:`${ass.length} pronto(s) para enviar ao cliente`,
+      itens:ass.map(c=>({t:`${c.evento} · ${cli(c.clienteId)}`,s:"assinado em "+dt((c.assinatura.assinadoEm||"").slice(0,10))}))});
+    const espera=(D.contratos||[]).filter(c=>donoDe(c)===e.id&&c.status!=="cancelado"&&c.assinatura&&c.assinatura.status==="pendente");
+    sec(L,{id:"esperando",icone:"⏳",titulo:"Aguardando assinatura da gestão",nivel:"info",rota:"contratos",resumo:`${espera.length} contrato(s)`,
+      itens:espera.map(c=>({t:`${c.evento} · ${cli(c.clienteId)}`,s:"pedido em "+dt((c.assinatura.pedidoEm||"").slice(0,10))}))});
     if(L.length)V[e.id]=L;
   }
   return {gestao:G,vendedores:V};
