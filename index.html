@@ -359,7 +359,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
 "use strict";
 /* ---------- estado ---------- */
 const COLS=["clientes","contratos","receber","pagar","extrato","contas","transf","orcamentos","equipe"];
-const S={clientes:[],contratos:[],receber:[],pagar:[],extrato:[],contas:[],transf:[],orcamentos:[],equipe:[],vinculos:[],usuarios:[],pedidos:[],lixeira:[],log:[],perfil:null,donos:[],donosOk:new Set(),cont:{},role:"",avisoLimite:false,sel:new Set(),config:{},loaded:{},me:null,names:{},canWrite:true,dbState:"connecting",dbError:""};
+const S={clientes:[],contratos:[],receber:[],pagar:[],extrato:[],contas:[],transf:[],orcamentos:[],equipe:[],vinculos:[],usuarios:[],pedidos:[],lixeira:[],log:[],fornecedores:[],perfil:null,donos:[],donosOk:new Set(),cont:{},role:"",avisoLimite:false,sel:new Set(),config:{},loaded:{},me:null,names:{},canWrite:true,dbState:"connecting",dbError:""};
 const UI={rf:"abertos",rq:"",pf:"abertos",pq:"",cf:"proximos",cq:"",kq:"",xf:"pendentes",xt:"todas",xm:"",xq:"",xlim:150,xb:"",rb:"",pb:"",pp:"",ps:"venc",of:"abertos",oq:"",or:"",ov:"lista",op:"3m",cr:"",rp:"ano",rs:"data",rc:false,rv:"eventos",dm:"realizado",dy:0};
 let db=null,userCap=null,assetsCap=null,dlCap=null;
 
@@ -770,7 +770,49 @@ function vPagar(){
 }
 
 /* ---------- Clientes ---------- */
+function abasCad(at){return ADMIN()?`<div class="tabs"><button class="tab" data-a="kt" data-v="cli" aria-pressed="${at==="cli"}">Clientes (${S.clientes.length})</button><button class="tab" data-a="kt" data-v="forn" aria-pressed="${at==="forn"}">Fornecedores (${S.fornecedores.length})</button></div>`:""}
+const normF=t=>norm(String(t||"")).replace(/\s+/g," ").trim();
+function pagosDe(f){const n=normF(f.nome);return S.pagar.filter(p=>p.fornecedorId===f.id||(n&&normF(p.fornecedor)===n))}
+function vFornecedores(){
+  const q=norm(UI.kq);
+  let list=S.fornecedores.slice().sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR"));
+  if(q)list=list.filter(f=>norm([f.nome,f.doc,f.email,f.telefone,f.categoria,f.contato].join(" ")).includes(q));
+  const semCad=[...new Set(S.pagar.map(p=>(p.fornecedor||"").trim()).filter(Boolean))].filter(n=>!S.fornecedores.some(f=>normF(f.nome)===normF(n)));
+  const ano=todayISO().slice(0,4);
+  const body=list.length?`<div class="tbl-wrap"><table><thead><tr><th>Fornecedor</th><th>CPF / CNPJ</th><th>Contato</th><th>PIX / banco</th><th class="r">Em aberto</th><th class="r">Pago em ${ano}</th><th class="r"></th></tr></thead><tbody>${list.map(f=>{const ps=pagosDe(f);const ab=ps.filter(p=>p.status!=="pago"&&p.status!=="cancelado");const pg=ps.filter(p=>p.status==="pago"&&(p.pagoEm||"").startsWith(ano));
+    return `<tr><td><div class="t">${esc(f.nome)}</div><div class="s">${esc([f.categoria,f.contato].filter(Boolean).join(" · "))}</div></td><td class="num">${esc(f.doc||"—")}</td><td><div>${esc(f.telefone||"")}</div><div class="s">${esc(f.email||"")}</div></td>
+    <td class="s">${esc(f.pix||"")}${f.banco?`<div>${esc(f.banco)}</div>`:""}</td><td class="r num">${ab.length?brl(ab.reduce((s,p)=>s+(p.valor||0),0)):"—"}</td><td class="r num">${brl(pg.reduce((s,p)=>s+((p.valorPago??p.valor)||0),0))}</td>
+    <td class="r"><div class="row-act">${W()?`<button class="btn sm ghost" data-a="edit-forn" data-id="${f.id}">Editar</button>`:""}</div></td></tr>`}).join("")}</tbody></table></div>`
+   :`<div class="empty"><strong>${S.fornecedores.length?"Nenhum fornecedor encontrado":"Nenhum fornecedor cadastrado"}</strong>${S.fornecedores.length?"":"Cadastre CNPJ, contato e PIX de quem fornece para a Bosco. Eles aparecem como sugestão ao lançar uma conta a pagar."}</div>`;
+  return `<div class="head"><div><h1>Clientes e fornecedores</h1><p class="sub">${S.fornecedores.length} fornecedor(es) cadastrado(s)</p></div><div class="actions">${W()?`${semCad.length?`<button class="btn" data-a="forn-importar">Trazer ${semCad.length} de A pagar</button>`:""}<button class="btn primary" data-a="novo-forn">+ Novo fornecedor</button>`:""}</div></div>
+  ${abasCad("forn")}
+  <div class="toolbar"><span></span><input class="search" id="kq" type="search" placeholder="Buscar nome, CNPJ, categoria" value="${esc(UI.kq)}" data-q="kq"></div>
+  <section class="panel">${body}</section>`;
+}
+function formFornecedor(f={}){
+  openDlg(f.id?"Editar fornecedor":"Novo fornecedor",
+   F("nome","Nome / Razão social",f.nome,{full:true,req:true})+F("doc","CPF / CNPJ",f.doc,{attrs:'inputmode="numeric"'})+SEL("categoria","Categoria padrão",[["","—"],...CATS.map(c=>[c,c])],f.categoria||"")+
+   F("contato","Pessoa de contato",f.contato)+F("telefone","Telefone / WhatsApp",f.telefone,{type:"tel"})+F("email","E-mail",f.email,{type:"email",full:true})+
+   F("pix","Chave PIX",f.pix)+F("banco","Banco / agência / conta",f.banco)+TA("obs","Observações",f.obs),
+   {registro:f,danger:f.id?{label:"Excluir fornecedor",fn:async()=>{dlg.close();if(await confirmBox(`Excluir o fornecedor <b>${esc(f.nome)}</b>? As contas a pagar dele continuam no sistema.`))await act(()=>db.collection("fornecedores").doc(f.id).delete(),"Fornecedor excluído")}}:null,
+    onSubmit:async fd=>{
+      const o={};for(const k of ["nome","doc","categoria","contato","telefone","email","pix","banco","obs"])o[k]=String(fd.get(k)||"").trim();
+      need(o.nome,"Informe o nome do fornecedor.");
+      need(!S.fornecedores.some(x=>x.id!==f.id&&normF(x.nome)===normF(o.nome)),"Já existe um fornecedor com esse nome.");
+      await write(()=>f.id?db.collection("fornecedores").doc(f.id).set({...strip(f),...o,...stamp()}):db.collection("fornecedores").doc().set({...o,criadoEm:new Date().toISOString(),criadoPor:S.me||null}));
+      toast(f.id?"Fornecedor atualizado":"Fornecedor cadastrado");
+    }});
+}
+async function importarFornecedores(){
+  const nomes=[...new Set(S.pagar.map(p=>(p.fornecedor||"").trim()).filter(Boolean))].filter(n=>!S.fornecedores.some(f=>normF(f.nome)===normF(n)));
+  if(!nomes.length)return;
+  if(!await confirmBox(`Cadastrar <b>${nomes.length}</b> fornecedor(es) a partir dos nomes usados em A pagar?<br><span class="muted">${nomes.slice(0,12).map(esc).join(", ")}${nomes.length>12?"…":""}</span><br>Depois você completa CNPJ, contato e PIX de cada um.`,"Cadastrar"))return;
+  await act(async()=>{for(const n of nomes){const cats=S.pagar.filter(p=>normF(p.fornecedor)===normF(n)).map(p=>p.categoria).filter(Boolean);
+    const cat=cats.sort((a,b)=>cats.filter(x=>x===b).length-cats.filter(x=>x===a).length)[0]||"";
+    await db.collection("fornecedores").doc().set({nome:n,categoria:cat,criadoEm:new Date().toISOString(),criadoPor:S.me||null})}},`${nomes.length} fornecedor(es) cadastrado(s)`);
+}
 function vClientes(){
+  if(ADMIN()&&UI.kt==="forn")return vFornecedores();
   const q=norm(UI.kq);
   let list=S.clientes.slice().sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR"));
   if(q)list=list.filter(c=>norm([c.nome,c.doc,c.email,c.telefone].join(" ")).includes(q));
@@ -778,7 +820,8 @@ function vClientes(){
     return `<tr><td><div class="t">${esc(c.nome)}</div><div class="s">${esc([c.cidade,c.uf].filter(Boolean).join(" / "))}</div></td><td class="num">${esc(c.doc||"—")}</td><td><div>${esc(c.telefone||"")}</div><div class="s">${esc(c.email||"")}</div></td><td class="r num">${cs.length}</td><td class="r num">${brl(cs.reduce((s,k)=>s+(k.valorTotal||0),0))}</td>
     <td class="r"><div class="row-act">${W()?`<button class="btn sm ghost" data-a="edit-cliente" data-id="${c.id}">Editar</button>`:""}</div></td></tr>`}).join("")}</tbody></table></div>`
    :`<div class="empty"><strong>${S.clientes.length?"Nenhum cliente encontrado":"Nenhum cliente cadastrado"}</strong>${S.clientes.length?"":"Os dados do cliente (CPF/CNPJ, endereço, e-mail, telefone) são os mesmos que o banco pede para gerar o boleto."}${W()&&!S.clientes.length?`<button class="btn primary" data-a="novo-cliente">+ Cadastrar cliente</button>`:""}</div>`;
-  return `<div class="head"><div><h1>Clientes</h1><p class="sub">${S.clientes.length} cadastrado(s)</p></div><div class="actions">${W()?`<button class="btn primary" data-a="novo-cliente">+ Novo cliente</button>`:""}</div></div>
+  return `<div class="head"><div><h1>${ADMIN()?"Clientes e fornecedores":"Clientes"}</h1><p class="sub">${S.clientes.length} cliente(s) cadastrado(s)</p></div><div class="actions">${W()?`<button class="btn primary" data-a="novo-cliente">+ Novo cliente</button>`:""}</div></div>
+  ${abasCad("cli")}
   <div class="toolbar"><span></span><input class="search" id="kq" type="search" placeholder="Buscar nome, CPF/CNPJ, e-mail" value="${esc(UI.kq)}" data-q="kq"></div>
   <section class="panel">${body}</section>`;
 }
@@ -1021,7 +1064,7 @@ function formReceita(x={}){
 /* despesas */
 function formDespesa(x={}){
   const novo=!x.id;
-  const forn=[...new Set(S.pagar.map(p=>p.fornecedor).filter(Boolean))].sort();
+  const forn=[...new Set([...S.fornecedores.map(f=>f.nome),...S.pagar.map(p=>p.fornecedor)].filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
   openDlg(novo?"Nova conta a pagar":"Editar conta a pagar",
    F("fornecedor","Fornecedor / favorecido",x.fornecedor,{full:true,req:true,attrs:'list="fornList"'})+`<datalist id="fornList">${forn.map(f=>`<option value="${esc(f)}">`).join("")}</datalist>`+
    F("descricao","Descrição",x.descricao,{full:true,attrs:'placeholder="Ex.: Carnes evento 26/09, NF 1234"'})+
@@ -1033,6 +1076,7 @@ function formDespesa(x={}){
    (novo?F("repetir","Repetir por quantos meses",1,{type:"number",attrs:'min="1" max="24"',hint:"Para contas fixas (aluguel, contador…)"}):"")+
    (x.status==="pago"?F("pagoEm","Pago em",x.pagoEm,{type:"date"}):""),
    {registro:x,danger:novo?null:{label:"Excluir",fn:async()=>{dlg.close();if(await confirmBox(`Excluir <b>${esc(x.fornecedor)}</b> (${brl(x.valor)})?`))await act(()=>db.collection("pagar").doc(x.id).delete(),"Conta excluída")}},
+    onOpen:f=>{const fi=$n(f,"fornecedor");if(!fi)return;fi.addEventListener("change",()=>{const fo=S.fornecedores.find(k=>normF(k.nome)===normF(fi.value));if(fo&&fo.categoria&&novo){const c=$n(f,"categoria");if(c)c.value=fo.categoria}})},
     onSubmit:async fd=>{
       const o={fornecedor:String(fd.get("fornecedor")||"").trim(),descricao:String(fd.get("descricao")||"").trim(),categoria:String(fd.get("categoria")),valor:parseBRL(fd.get("valor")),vencimento:String(fd.get("vencimento")||""),forma:String(fd.get("forma")||""),contaId:String(fd.get("contaId")||""),prioridade:Number(fd.get("prioridade"))||0,contratoId:String(fd.get("contratoId")||"")};
       if(fd.has("pagoEm"))o.pagoEm=String(fd.get("pagoEm"));
@@ -2078,13 +2122,14 @@ function formEquipe(){
 function closeDlgSafe(){const d=document.getElementById("dlg");if(d&&d.open)d.close()}
 
 /* ---------- Controle (gestão) ---------- */
-const COL_N={clientes:"Cliente",contratos:"Contrato",receber:"A receber",orcamentos:"Orçamento",pagar:"A pagar",contas:"Banco",transf:"Transferência",equipe:"Equipe",usuarios:"Acesso",config:"Configurações"};
+const COL_N={fornecedores:"Fornecedor",clientes:"Cliente",contratos:"Contrato",receber:"A receber",orcamentos:"Orçamento",pagar:"A pagar",contas:"Banco",transf:"Transferência",equipe:"Equipe",usuarios:"Acesso",config:"Configurações"};
 const mesNome=m=>m?new Date(m+"-15").toLocaleDateString("pt-BR",{month:"long",year:"numeric"}):"";
 function resumoDe(col,x){
   if(!x)return "";
   switch(col){
     case "receber":return `${clienteNome(x.clienteId)||""} · ${x.descricao||""} · ${brl(x.valor)}${x.numero?" · boleto "+x.numero:""}`;
     case "pagar":return `${x.fornecedor||""} · ${x.descricao||""} · ${brl(x.valor)}`;
+    case "fornecedores":return `${x.nome||""}${x.doc?" · "+x.doc:""}`;
     case "contratos":return `${x.evento||""} · ${clienteNome(x.clienteId)||""} · ${brl(x.valorTotal)}`;
     case "orcamentos":return `${x.numero||""} · ${x.evento||x.contatoNome||""}${x.valor?" · "+brl(x.valor):""}`;
     case "transf":return `Transferência · ${brl(x.valor)} · ${fmtD(x.data)}`;
@@ -2416,6 +2461,10 @@ document.addEventListener("click",ev=>{
     case "dm":UI.dm=v;render();break;
     case "dre-csv":exportDRE();break;
     case "cb":UI.cb=v;render();break;
+    case "kt":UI.kt=v;UI.kq="";render();break;
+    case "novo-forn":formFornecedor();break;
+    case "edit-forn":formFornecedor(byId(S.fornecedores,id));break;
+    case "forn-importar":importarFornecedores();break;
     case "avx":UI.avx={...(UI.avx||{}),[v]:!(UI.avx||{})[v]};render();break;
     case "com-csv":exportComissoes();break;
     case "cv":UI.cv=v;render();break;
@@ -2571,7 +2620,7 @@ auth.onAuthStateChanged(async u=>{
   db.doc("config/geral").onSnapshot(s=>{S.config=s.exists?s.data():{};agendar()},onErr);
   for(const t of ["boleto","orcamento"])db.doc("contadores/"+t).onSnapshot(s=>{S.cont[t]=s.exists?s.data():{};agendar()},onErr);
   if(S.role==="admin"){
-    ["pagar","extrato","contas","transf","donos"].forEach(simples);
+    ["pagar","extrato","contas","transf","donos","fornecedores"].forEach(simples);
     db.collection("lixeira").onSnapshot(snap=>{S.lixeira=snap.docs.map(d=>({...d.data(),id:d.id}));agendar()},onErr);
     db.collection("log").orderBy("em","desc").limit(300).onSnapshot(snap=>{S.log=snap.docs.map(d=>({...d.data(),id:d.id}));agendar()},onErr);
     db.collection("pedidos").onSnapshot(snap=>{S.pedidos=snap.docs.map(d=>({...d.data(),id:d.id}));agendar();const l=document.getElementById("eqList");if(l&&l._redraw)l._redraw()},onErr);
