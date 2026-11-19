@@ -755,6 +755,105 @@ function vReceber(){
 }
 
 /* ---------- Pagar ---------- */
+/* ---------- Importar DDA (boletos emitidos contra o CNPJ) ---------- */
+const reData=/^(\d{2})\/(\d{2})\/(\d{4})$/,reValor=/^-?(?:R\$\s*)?\d{1,3}(?:\.\d{3})*,\d{2}$|^-?(?:R\$\s*)?\d+,\d{2}$/;
+const isoDe=d=>{const m=reData.exec(d.trim());return m?`${m[3]}-${m[2]}-${m[1]}`:""};
+function linhaDDA(cel){ // cel: textos da linha na ordem
+  cel=cel.map(c=>String(c||"").trim()).filter(Boolean);
+  const iv=cel.findIndex(c=>reData.test(c));if(iv<0)return null;
+  const im=cel.findIndex((c,i)=>i>iv&&reValor.test(c));if(im<0)return null;
+  const antes=cel.slice(0,iv);if(!antes.length)return null;
+  let benef=antes[0],doc=antes.slice(1).join(" ");
+  if(antes.length===1){const m=/^(.*?)\s{2,}(\S.*)$/.exec(antes[0]);if(m){benef=m[1];doc=m[2]}}
+  if(/^(benefici|cedente|vencimento|total)/i.test(benef))return null;
+  return {benef:benef.trim(),doc:doc.trim(),venc:isoDe(cel[iv]),valor:parseBRL(cel[im].replace(/R\$\s*/,""))};
+}
+async function lerDDAArquivo(file){
+  if(/\.pdf$/i.test(file.name)||file.type==="application/pdf"){
+    await loadScript(PDFJS+"pdf.min.js");await loadScript(PDFJS+"pdf.worker.min.js");
+    const pdf=await window.pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;const out=[];
+    for(let n=1;n<=pdf.numPages;n++){const pg=await pdf.getPage(n);const tc=await pg.getTextContent();
+      const L={};for(const it of tc.items){const t=(it.str||"").trim();if(!t)continue;const y=Math.round(it.transform[5]/3);(L[y]=L[y]||[]).push({x:it.transform[4],t})}
+      const ys=Object.keys(L).map(Number).sort((a,b)=>b-a);let col=null;
+      for(const y of ys){const it=L[y].sort((a,b)=>a.x-b.x);const txt=it.map(i=>i.t).join(" ");
+        if(/benefici|cedente/i.test(txt)&&/venc/i.test(txt)){const f=re=>{const i=it.find(i=>re.test(i.t));return i?i.x:null};col={doc:f(/^(documento|n[ºo°]|nosso)/i),venc:f(/^venc/i)};continue}
+        let cel;
+        if(col&&col.doc!=null&&col.venc!=null){const b=[],d=[],r=[];for(const i of it){if(i.x<col.doc-4)b.push(i.t);else if(i.x<col.venc-4)d.push(i.t);else r.push(i.t)}cel=[b.join(" "),d.join(" "),...r]}
+        else cel=it.map(i=>i.t);
+        const x=linhaDDA(cel);if(x)out.push(x)}}
+    return out;
+  }
+  return lerDDATexto(await file.text());
+}
+function lerDDATexto(txt){
+  const out=[];for(const ln of String(txt||"").split(/\r?\n/)){if(!ln.trim())continue;
+    let cel=ln.includes("\t")?ln.split("\t"):ln.includes(";")?ln.split(";").map(c=>c.replace(/^"|"$/g,"")):null;
+    if(!cel){const m=/^(.+?)\s+(\S+(?:\s\S+)?)\s+(\d{2}\/\d{2}\/\d{4})\s+(?:R\$\s*)?(-?[\d.]+,\d{2})\s*$/.exec(ln.trim());cel=m?[m[1],m[2],m[3],m[4]]:[]}
+    const x=linhaDDA(cel);if(x)out.push(x)}
+  return out;
+}
+function chaveDDA(x){return [normF(x.benef),x.doc,x.venc,x.valor].join("|")}
+function fornecedorDDA(benef){
+  const b=normF(benef);if(!b)return null;
+  const casa=n=>{n=normF(n);return n&&(n===b||(b.length>=12&&n.startsWith(b))||(n.length>=12&&b.startsWith(n)))};
+  const f=S.fornecedores.find(k=>casa(k.nome));if(f)return {nome:f.nome,id:f.id,categoria:f.categoria||""};
+  const p=S.pagar.slice().reverse().find(k=>casa(k.fornecedor));if(p)return {nome:p.fornecedor,id:p.fornecedorId||"",categoria:p.categoria||""};
+  return null;
+}
+function categoriaDDA(n){n=normF(n);
+  if(/copel|sanepar|energia|agua|claro|vivo|tim |oi |telefon|internet|aluguel|condominio|storehost|hospedagem/.test(n))return "Aluguel e contas";
+  if(/bebida|cervej|vinho|distribuidora de bebidas|ambev|coca/.test(n))return "Bebidas";
+  if(/aliment|carne|frigor|acougue|hortifruti|laticin|padaria|food|atacad|mercado|sabor|berry/.test(n))return "Alimentos";
+  if(/equipament|inox|platinox|maquina/.test(n))return "Equipamentos";
+  if(/receita federal|prefeitura|sefaz|darf|simples nacional|secretaria da fazenda/.test(n))return "Impostos";
+  if(/manuten|reforma|eletric|hidraul/.test(n))return "Manutenção";
+  return "Outros";
+}
+function formDDA(){
+  openDlg("Importar DDA",`<p class="fld full hint" style="margin:0">Exporte a lista de boletos do DDA no site do banco (PDF, CSV ou texto) e escolha o arquivo. Também dá para copiar a tabela do site do banco e colar abaixo. Nada é lançado antes de você conferir.</p>
+   <div class="fld full"><label for="f_ddaArq">Arquivo do banco</label><input type="file" id="f_ddaArq" accept=".pdf,.csv,.txt,application/pdf,text/csv,text/plain"></div>`+
+   TA("cola","ou cole aqui a lista copiada do banco",""),
+   {submit:"Ler boletos",onSubmit:async fd=>{
+      const arq=document.getElementById("f_ddaArq").files[0];let L=[];
+      try{L=arq?await lerDDAArquivo(arq):lerDDATexto(fd.get("cola"))}catch(e){throw new Error("Não consegui ler esse arquivo. Tente exportar em PDF ou CSV, ou copie e cole a tabela.")}
+      need(L.length,"Não encontrei boletos nesse arquivo. Confira se é a lista do DDA (beneficiário, vencimento e valor).");
+      setTimeout(()=>previaDDA(L),60);
+   }});
+}
+function previaDDA(L){
+  const ja=new Set(S.pagar.map(p=>p.ddaKey).filter(Boolean));
+  const linhas=L.map((x,i)=>{const k=chaveDDA(x);const f=fornecedorDDA(x.benef);
+    const dup=ja.has(k)||S.pagar.some(p=>p.vencimento===x.venc&&p.valor===x.valor&&f&&normF(p.fornecedor)===normF(f.nome));
+    return {...x,i,k,dup,forn:f?f.nome:x.benef,fornId:f?f.id:"",novo:!f,cat:(f&&f.categoria)||categoriaDDA(x.benef)}});
+  const novos=linhas.filter(l=>!l.dup);
+  const opt=(arr,v)=>arr.map(c=>`<option ${c===v?"selected":""}>${esc(c)}</option>`).join("");
+  openDlg(`Conferir boletos do DDA · ${novos.length} novo(s)`,`<div class="fld full"><div class="tbl-wrap" style="max-height:55vh;overflow:auto"><table class="dda"><thead><tr><th><input type="checkbox" id="ddaAll" checked aria-label="Marcar todos"></th><th>Fornecedor</th><th>Documento</th><th>Vencimento</th><th class="r">Valor</th><th>Categoria</th><th>Prioridade</th></tr></thead><tbody>
+   ${linhas.map(l=>`<tr class="${l.dup?"muted":""}"><td><input type="checkbox" data-dda="${l.i}" ${l.dup?"":"checked"} aria-label="Lançar ${esc(l.benef)}"></td>
+     <td><input class="search" style="min-width:210px" data-ddaf="${l.i}" value="${esc(l.forn)}">${l.dup?`<div class="s">já lançado</div>`:l.novo?`<div class="s">fornecedor novo · será cadastrado</div>`:""}</td>
+     <td class="num s">${esc(l.doc)}</td><td class="num">${fmtD(l.venc)}</td><td class="r num">${brl(l.valor)}</td>
+     <td><select data-ddac="${l.i}">${opt(CATS,l.cat)}</select></td><td><select data-ddap="${l.i}"><option value="1">1 · Máxima</option><option value="2" selected>2 · Média</option><option value="3">3 · Baixa</option></select></td></tr>`).join("")}</tbody></table></div>
+   <span class="hint">Total marcado: <b id="ddaTot" class="num"></b></span></div>`,
+   {submit:"Lançar em A pagar",onOpen:f=>{
+      const tot=()=>{let t=0,n=0;for(const c of f.querySelectorAll("[data-dda]"))if(c.checked){t+=linhas[c.dataset.dda].valor;n++}f.querySelector("#ddaTot").textContent=`${n} boleto(s) · ${brl(t)}`};
+      f.querySelector("#ddaAll").addEventListener("change",e=>{for(const c of f.querySelectorAll("[data-dda]"))if(!linhas[c.dataset.dda].dup)c.checked=e.target.checked;tot()});
+      f.addEventListener("change",e=>{if(e.target.matches("[data-dda]"))tot()});tot();
+      const dl=dlg.querySelector(".dlg-card,form")||dlg;dlg.style.maxWidth="min(1100px,96vw)";dlg.style.width="min(1100px,96vw)";},
+    onSubmit:async(fd,f)=>{
+      const sel=[...f.querySelectorAll("[data-dda]")].filter(c=>c.checked).map(c=>linhas[c.dataset.dda]);
+      need(sel.length,"Marque pelo menos um boleto.");
+      let nf=0;
+      await write(async()=>{const cache={};
+        for(const l of sel){
+          const nome=f.querySelector(`[data-ddaf="${l.i}"]`).value.trim()||l.benef;const cat=f.querySelector(`[data-ddac="${l.i}"]`).value;const pri=Number(f.querySelector(`[data-ddap="${l.i}"]`).value)||2;
+          let fid=l.fornId;const kn=normF(nome);
+          if(!fid){const ex=S.fornecedores.find(k=>normF(k.nome)===kn)||cache[kn];
+            if(ex)fid=ex.id;else{const r=db.collection("fornecedores").doc();await r.set({nome,categoria:cat,origem:"DDA",criadoEm:new Date().toISOString(),criadoPor:S.me||null});fid=r.id;cache[kn]={id:r.id};nf++}}
+          await db.collection("pagar").doc().set({fornecedor:nome,fornecedorId:fid,descricao:`Boleto DDA${l.doc?" · doc. "+l.doc:""}`,documento:l.doc,categoria:cat,valor:l.valor,vencimento:l.venc,prioridade:pri,status:"aberto",origem:"DDA",ddaKey:l.k,criadoEm:new Date().toISOString(),criadoPor:S.me||null});
+        }});
+      dlg.style.maxWidth="";dlg.style.width="";
+      toast(`${sel.length} boleto(s) lançado(s) em A pagar${nf?` · ${nf} fornecedor(es) novo(s) cadastrado(s)`:""}`);
+    }});
+}
 function vPagar(){
   const list=filterList(S.pagar,UI.pf,UI.pq,x=>[x.fornecedor,x.descricao,x.categoria,x.forma].join(" ")).filter(x=>(!UI.pb||x.contaId===UI.pb)&&(!UI.pp||String(x.prioridade||"")===UI.pp));
   if(UI.ps==="prio")list.sort((a,b)=>((a.status==="pago")-(b.status==="pago"))||((a.prioridade||9)-(b.prioridade||9))||(a.vencimento||"").localeCompare(b.vencimento||""));
@@ -764,7 +863,7 @@ function vPagar(){
     <td>${pill(st)}${st==="pago"?`<div class="s">${fmtD(x.pagoEm)}${x.comprovanteId?" · "+comprovanteLink(x):""}</div>`:""}${metaPg(x)}</td>
     <td class="r"><div class="row-act">${W()&&x.status!=="pago"?`<button class="btn sm primary" data-a="pagar-desp" data-id="${x.id}">Marcar pago</button>`:""}${W()&&x.status==="pago"?`<button class="btn sm ghost" data-a="desfazer-desp" data-id="${x.id}">Desfazer</button>`:""}${W()?`<button class="btn sm ghost" data-a="edit-desp" data-id="${x.id}">Editar</button>`:""}</div></td></tr>`}).join("")}</tbody></table></div>`
    :`<div class="empty"><strong>${S.pagar.length?"Nada neste filtro":"Nenhuma conta a pagar cadastrada"}</strong>${S.pagar.length?"":"Registre fornecedores, folha, aluguel e impostos para ver o saldo previsto no painel."}${W()&&!S.pagar.length?`<button class="btn primary" data-a="nova-despesa">+ Cadastrar conta a pagar</button>`:""}</div>`;
-  return `<div class="head"><div><h1>A pagar</h1><p class="sub">Fornecedores, equipe, contas fixas e impostos.</p></div><div class="actions"><button class="btn" data-a="csv" data-v="pagar">Exportar planilha</button>${W()?`<button class="btn primary" data-a="nova-despesa">+ Conta a pagar</button>`:""}</div></div>
+  return `<div class="head"><div><h1>A pagar</h1><p class="sub">Fornecedores, equipe, contas fixas e impostos.</p></div><div class="actions"><button class="btn" data-a="csv" data-v="pagar">Exportar planilha</button>${W()?`<button class="btn" data-a="dda">Importar DDA</button><button class="btn primary" data-a="nova-despesa">+ Conta a pagar</button>`:""}</div></div>
   <div class="toolbar"><div class="chips">${chipsFor("pf",UI.pf,S.pagar)}</div><div class="chips"><select class="search" style="width:auto" id="pp" aria-label="Prioridade"><option value="">Todas as prioridades</option>${[1,2,3].map(n=>`<option value="${n}" ${UI.pp===String(n)?"selected":""}>${n} · ${PRIO[n]}</option>`).join("")}</select><select class="search" style="width:auto" id="ps" aria-label="Ordenar"><option value="venc" ${UI.ps==="venc"?"selected":""}>Ordenar por vencimento</option><option value="prio" ${UI.ps==="prio"?"selected":""}>Ordenar por prioridade</option></select>${bankFilter("pb")}<input class="search" id="pq" type="search" placeholder="Buscar fornecedor ou categoria" value="${esc(UI.pq)}" data-q="pq"></div></div>
   <section class="panel">${body}${list.length?`<div class="panel-b" style="border-top:1px solid var(--line);display:flex;justify-content:space-between"><span class="muted">${list.length} item(ns)</span><b class="num">${brl(tot)}</b></div>`:""}</section>`;
 }
@@ -839,6 +938,7 @@ function historico(x){
   return partes.length?`<p class="hist">${partes.join(" · ")}</p>`:"";
 }
 function openDlg(title,fields,{submit="Salvar",onSubmit,extra="",danger=null,onOpen,registro=null}={}){
+  dlg.style.maxWidth="";dlg.style.width="";
   if(registro)resolveNames([registro.criadoPor,registro.atualizadoPor,registro.pagoPor].filter(Boolean));
   dlg.innerHTML=`<form id="dform" novalidate><div class="dlg-h"><h2>${title}</h2></div><div class="dlg-b">${fields}${historico(registro)}<div class="err" id="derr" hidden></div></div>
   <div class="dlg-f">${danger?`<button type="button" class="btn danger" id="ddanger" style="margin-right:auto">${danger.label}</button>`:""}${extra}<button type="button" class="btn" id="dcancel">Cancelar</button>${submit?`<button type="submit" class="btn primary" id="dsubmit">${submit}</button>`:""}</div></form>`;
@@ -2462,6 +2562,7 @@ document.addEventListener("click",ev=>{
     case "dre-csv":exportDRE();break;
     case "cb":UI.cb=v;render();break;
     case "kt":UI.kt=v;UI.kq="";render();break;
+    case "dda":formDDA();break;
     case "novo-forn":formFornecedor();break;
     case "edit-forn":formFornecedor(byId(S.fornecedores,id));break;
     case "forn-importar":importarFornecedores();break;
