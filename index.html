@@ -307,6 +307,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
 .gate-err{color:var(--danger,#b42318);font-size:13px;margin-top:12px;min-height:1em}
 .who-out{margin-left:6px}
 [hidden]{display:none!important}
+.emp-bar{display:flex;justify-content:flex-end;align-items:center;gap:10px;margin:-6px 0 8px}.emp-sel{width:auto;min-width:200px}
 .avisos{margin-bottom:16px}.av{padding:12px 16px;border-top:1px solid var(--line)}
 .av-h{display:flex;gap:10px;align-items:flex-start}.av-i{font-size:18px;line-height:1.2}.av-t{flex:1;display:flex;flex-direction:column;gap:2px}.av-t .s{color:var(--muted);font-size:12.5px}
 .av-alta .av-t b{color:var(--bad)}.av-l{margin:6px 0 0 28px;display:flex;flex-direction:column;gap:4px}
@@ -483,11 +484,37 @@ function render(){
   if(!ADMIN()&&["bancos","conciliacao","pagar","resultados","controle"].includes(r))r="painel";
   const m=document.getElementById("main");
   const views={painel:ADMIN()?vPainel:vPainelComercial,orcamentos:vOrcamentos,contratos:vContratos,receber:vReceber,pagar:vPagar,conciliacao:vConciliacao,bancos:vBancos,resultados:vResultados,clientes:vClientes,controle:vControle};
-  m.innerHTML=banner()+views[r]();
-  if(r==="painel")drawChart();
+  comFiltroEmpresa(()=>{
+    m.innerHTML=banner()+(ADMIN()&&EMP_ROTAS.includes(r)?`<div class="emp-bar">${seletorEmpresa()}${UI.emp?`<span class="s muted">Mostrando só: <b>${esc(empNome(UI.emp))}</b></span>`:""}</div>`:"")+views[r]();
+    if(r==="painel")drawChart();
+  });
   resolveNames();
 }
 const W=()=>S.canWrite&&S.dbState==="on";
+/* ---------- Empresas (CNPJs) ---------- */
+const EMPRESAS_PADRAO=[{id:"gastro",nome:"Bosco Gastronomia e Eventos LTDA",cnpj:"42151989000184",curto:"Gastronomia"},{id:"espaco",nome:"Espaço de Eventos Bosco LTDA",cnpj:"45430983000134",curto:"Espaço de Eventos"}];
+const EMPS=()=>(S.config.empresas&&S.config.empresas.length?S.config.empresas:EMPRESAS_PADRAO);
+const empPadrao=()=>EMPS()[0].id;
+const empNome=id=>{const e=EMPS().find(e=>e.id===id);return e?e.curto:""};
+const empOpts=()=>EMPS().map(e=>[e.id,`${e.curto} · ${e.cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,"$1.$2.$3/$4-$5")}`]);
+function empDe(x,col){
+  if(!x)return empPadrao();if(x.empresaId)return x.empresaId;
+  if(x.contratoId){const k=(S._full?S._full.contratos:S.contratos).find(c=>c.id===x.contratoId);if(k&&k.empresaId)return k.empresaId}
+  const cid=x.contaId||x.contaRec||x.de;if(cid){const c=(S._full?S._full.contas:S.contas).find(c=>c.id===cid);if(c&&c.empresaId)return c.empresaId}
+  return empPadrao();
+}
+const EMP_ROTAS=["painel","receber","pagar","bancos","conciliacao","resultados","contratos"];
+function comFiltroEmpresa(fn){
+  const e=ADMIN()&&UI.emp;if(!e)return fn();
+  const F={receber:S.receber,pagar:S.pagar,contratos:S.contratos,contas:S.contas,transf:S.transf,extrato:S.extrato};S._full=F;
+  const contaOk=new Set(F.contas.filter(c=>empDe(c)===e||(!c.empresaId&&e===empPadrao())).map(c=>c.id));
+  try{
+    S.contratos=F.contratos.filter(k=>empDe(k)===e);S.receber=F.receber.filter(x=>empDe(x)===e);S.pagar=F.pagar.filter(x=>empDe(x)===e);
+    S.contas=F.contas.filter(c=>contaOk.has(c.id));S.transf=F.transf.filter(t=>contaOk.has(t.de)||contaOk.has(t.para));S.extrato=F.extrato.filter(m=>contaOk.has(m.contaId||String(m.id||"").split("_")[0]));
+    return fn();
+  }finally{Object.assign(S,F);delete S._full}
+}
+function seletorEmpresa(){return ADMIN()?`<select class="search emp-sel" id="empSel" aria-label="Empresa"><option value="">Todas as empresas</option>${EMPS().map(e=>`<option value="${e.id}" ${UI.emp===e.id?"selected":""}>${esc(e.curto)}</option>`).join("")}</select>`:""}
 
 /* ---------- Painel ---------- */
 function eff(it){ // data e valor efetivos para o fluxo
@@ -771,6 +798,7 @@ function linhaDDA(cel){ // cel: textos da linha na ordem
 function lerDDABlocos(linhas){
   const out=[];let cur=null;const dig=t=>String(t||"").replace(/\D/g,"");
   for(const ln of linhas){const t=ln.replace(/\s+/g," ").trim();if(!t)continue;
+    let pm=/^Pagador:.*CNPJ\s*([\d./-]{11,20})/i.exec(t);if(pm&&cur){cur.pagador=dig(pm[1]);continue}
     let m=/^(?!Pagador)(.+?)\s+CNPJ\s*([\d./-]{11,20})$/i.exec(t);
     if(m){cur={benef:m[1].trim(),cnpj:dig(m[2])};continue}
     m=/^(\S+)\s+(\d{4}-\d{2}-\d{2})\s+(\d{4}-\d{2}-\d{2})\s+(\S+)\s+R\$\s*([\d.]+,\d{2})/.exec(t);
@@ -778,7 +806,7 @@ function lerDDABlocos(linhas){
     m=/^(\d{6,})\s+([\d.\s]{40,})$/.exec(t);
     if(m&&cur&&out[out.length-1]===cur){cur.doc=m[1];cur.linha=m[2].trim()}
   }
-  return out.filter(x=>!x.pago&&x.venc&&x.valor).map(x=>({benef:x.benef,doc:x.doc||"",venc:x.venc,valor:x.valor,cnpj:x.cnpj,linha:x.linha||""}));
+  return out.filter(x=>!x.pago&&x.venc&&x.valor).map(x=>({benef:x.benef,doc:x.doc||"",venc:x.venc,valor:x.valor,cnpj:x.cnpj,linha:x.linha||"",pagador:x.pagador||""}));
 }
 async function lerDDAArquivo(file){
   if(/\.pdf$/i.test(file.name)||file.type==="application/pdf"){
@@ -788,6 +816,7 @@ async function lerDDAArquivo(file){
       const L={};for(const it of tc.items){const t=(it.str||"").trim();if(!t)continue;const y=Math.round(it.transform[5]/3);(L[y]=L[y]||[]).push({x:it.transform[4],t})}
       pags.push(L)}
     const todas=[];for(const L of pags)for(const y of Object.keys(L).map(Number).sort((a,b)=>b-a))todas.push(L[y].sort((a,b)=>a.x-b.x).map(i=>i.t).join(" "));
+    lerDDAArquivo.empresa=empresaDoTexto(todas.join("\n"));
     if(todas.some(l=>/^Pagador:/i.test(l.trim()))){const b=lerDDABlocos(todas);if(b.length)return b}
     for(const L of pags){
       const ys=Object.keys(L).map(Number).sort((a,b)=>b-a);let col=null;
@@ -799,9 +828,11 @@ async function lerDDAArquivo(file){
         const x=linhaDDA(cel);if(x)out.push(x)}}
     return out;
   }
-  const tx=await file.text();if(/^\s*Pagador:/im.test(tx)){const b=lerDDABlocos(tx.split(/\r?\n/));if(b.length)return b}
+  const tx=await file.text();lerDDAArquivo.empresa=empresaDoTexto(tx);if(/^\s*Pagador:/im.test(tx)){const b=lerDDABlocos(tx.split(/\r?\n/));if(b.length)return b}
   return lerDDATexto(tx);
 }
+function empresaDoTexto(t){const d=String(t||"").replace(/[.\/-]/g,"");for(const e of EMPS())if(d.includes(e.cnpj))return e.id;
+  const n=normF(t);for(const e of EMPS()){const pal=normF(e.nome).replace(/\b(ltda|e|de)\b/g," ").split(/\s+/).filter(w=>w.length>3);if(pal.length&&pal.every(w=>n.includes(w)))return e.id}return ""}
 function lerDDATexto(txt){
   const out=[];for(const ln of String(txt||"").split(/\r?\n/)){if(!ln.trim())continue;
     let cel=ln.includes("\t")?ln.split("\t"):ln.includes(";")?ln.split(";").map(c=>c.replace(/^"|"$/g,"")):null;
@@ -834,12 +865,13 @@ function formDDA(){
    TA("cola","ou cole aqui a lista copiada do banco",""),
    {submit:"Ler boletos",onSubmit:async fd=>{
       const arq=document.getElementById("f_ddaArq").files[0];let L=[];
-      try{L=arq?await lerDDAArquivo(arq):lerDDATexto(fd.get("cola"))}catch(e){throw new Error("Não consegui ler esse arquivo. Tente exportar em PDF ou CSV, ou copie e cole a tabela.")}
+      lerDDAArquivo.empresa="";
+      try{L=arq?await lerDDAArquivo(arq):(lerDDAArquivo.empresa=empresaDoTexto(fd.get("cola")),lerDDATexto(fd.get("cola")))}catch(e){throw new Error("Não consegui ler esse arquivo. Tente exportar em PDF ou CSV, ou copie e cole a tabela.")}
       need(L.length,"Não encontrei boletos nesse arquivo. Confira se é a lista do DDA (beneficiário, vencimento e valor).");
-      setTimeout(()=>previaDDA(L),60);
+      const emp=lerDDAArquivo.empresa;setTimeout(()=>previaDDA(L,emp),60);
    }});
 }
-function previaDDA(L){
+function previaDDA(L,empDet){
   const ja=new Set(S.pagar.map(p=>p.ddaKey).filter(Boolean));
   const linhas=L.map((x,i)=>{const k=chaveDDA(x);const f=fornecedorDDA(x.benef,x.cnpj);
     const dup=ja.has(k)||S.pagar.some(p=>p.vencimento===x.venc&&p.valor===x.valor&&f&&normF(p.fornecedor)===normF(f.nome));
@@ -851,7 +883,8 @@ function previaDDA(L){
      <td><input class="search" style="min-width:210px" data-ddaf="${l.i}" value="${esc(l.forn)}">${l.dup?`<div class="s">já lançado</div>`:l.novo?`<div class="s">fornecedor novo · será cadastrado</div>`:""}</td>
      <td class="num s">${esc(l.doc)}</td><td class="num">${fmtD(l.venc)}</td><td class="r num">${brl(l.valor)}</td>
      <td><select data-ddac="${l.i}">${opt(CATS,l.cat)}</select></td><td><select data-ddap="${l.i}"><option value="1">1 · Máxima</option><option value="2" selected>2 · Média</option><option value="3">3 · Baixa</option></select></td></tr>`).join("")}</tbody></table></div>
-   <span class="hint">Total marcado: <b id="ddaTot" class="num"></b></span></div>`,
+   <span class="hint">Total marcado: <b id="ddaTot" class="num"></b></span></div>`+
+   SEL("empresaId","Lançar na empresa",empOpts(),empDet||UI.emp||empPadrao(),{full:true})+`<p class="fld full hint" style="margin:-6px 0 0">${empDet?"Empresa identificada pelo pagador do arquivo do banco.":"Não identifiquei a empresa no arquivo. Confira antes de lançar."}</p>`,
    {submit:"Lançar em A pagar",onOpen:f=>{
       const tot=()=>{let t=0,n=0;for(const c of f.querySelectorAll("[data-dda]"))if(c.checked){t+=linhas[c.dataset.dda].valor;n++}f.querySelector("#ddaTot").textContent=`${n} boleto(s) · ${brl(t)}`};
       f.querySelector("#ddaAll").addEventListener("change",e=>{for(const c of f.querySelectorAll("[data-dda]"))if(!linhas[c.dataset.dda].dup)c.checked=e.target.checked;tot()});
@@ -860,14 +893,14 @@ function previaDDA(L){
     onSubmit:async(fd,f)=>{
       const sel=[...f.querySelectorAll("[data-dda]")].filter(c=>c.checked).map(c=>linhas[c.dataset.dda]);
       need(sel.length,"Marque pelo menos um boleto.");
-      let nf=0;
+      let nf=0;const empId=String(fd.get("empresaId")||empPadrao());
       await write(async()=>{const cache={};
         for(const l of sel){
           const nome=f.querySelector(`[data-ddaf="${l.i}"]`).value.trim()||l.benef;const cat=f.querySelector(`[data-ddac="${l.i}"]`).value;const pri=Number(f.querySelector(`[data-ddap="${l.i}"]`).value)||2;
           let fid=l.fornId;const kn=normF(nome);
           if(!fid){const ex=S.fornecedores.find(k=>normF(k.nome)===kn)||cache[kn];
             if(ex)fid=ex.id;else{const r=db.collection("fornecedores").doc();await r.set({nome,doc:l.cnpj?l.cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,"$1.$2.$3/$4-$5"):"",categoria:cat,origem:"DDA",criadoEm:new Date().toISOString(),criadoPor:S.me||null});fid=r.id;cache[kn]={id:r.id};nf++}}
-          await db.collection("pagar").doc().set({fornecedor:nome,fornecedorId:fid,descricao:`Boleto DDA${l.doc?" · doc. "+l.doc:""}`,documento:l.doc,linhaDigitavel:l.linha||"",cnpjBenef:l.cnpj||"",categoria:cat,valor:l.valor,vencimento:l.venc,prioridade:pri,status:"aberto",origem:"DDA",ddaKey:l.k,criadoEm:new Date().toISOString(),criadoPor:S.me||null});
+          await db.collection("pagar").doc().set({fornecedor:nome,fornecedorId:fid,descricao:`Boleto DDA${l.doc?" · doc. "+l.doc:""}`,documento:l.doc,empresaId:empId,linhaDigitavel:l.linha||"",cnpjBenef:l.cnpj||"",categoria:cat,valor:l.valor,vencimento:l.venc,prioridade:pri,status:"aberto",origem:"DDA",ddaKey:l.k,criadoEm:new Date().toISOString(),criadoPor:S.me||null});
         }});
       dlg.style.maxWidth="";dlg.style.width="";
       toast(`${sel.length} boleto(s) lançado(s) em A pagar${nf?` · ${nf} fornecedor(es) novo(s) cadastrado(s)`:""}`);
@@ -1024,7 +1057,7 @@ function formContrato(c={},preCliente){
   const anexos=(c.anexos||[]).slice();
   openDlg(novo?"Novo contrato":"Editar contrato",
    `<div class="fld full"><label for="f_clienteId">Cliente *</label><div style="display:flex;gap:6px"><select id="f_clienteId" name="clienteId" style="flex:1;min-width:0">${opts.map(([v,l])=>`<option value="${esc(v)}" ${v===(preCliente||c.clienteId||"")?"selected":""}>${esc(l)}</option>`).join("")}</select><button type="button" class="btn" id="novoCli">+ Cliente</button></div></div>`+
-   F("evento","Evento",c.evento,{full:true,req:true,attrs:'placeholder="Ex.: Casamento Ana &amp; Pedro"'})+
+   F("evento","Evento",c.evento,{full:true,req:true,attrs:'placeholder="Ex.: Casamento Ana &amp; Pedro"'})+SEL("empresaId","Empresa que fatura",empOpts(),c.empresaId||(novo?(UI.emp||empPadrao()):empDe(c)),{full:true})+
    F("dataEvento","Data do evento",c.dataEvento,{type:"date",req:true})+F("local","Local",c.local||"Villa Bosco")+
    F("convidados","Convidados",c.convidados||"",{type:"number",attrs:'min="0"'})+F("dataAssinatura","Data da assinatura",c.dataAssinatura||t,{type:"date"})+
    F("valorTotal","Valor total (R$)",c.valorTotal?brlIn(c.valorTotal):"",{req:true,attrs:'inputmode="decimal" placeholder="0,00"'})+F("pctEntrada","Entrada (%)",c.pctEntrada??40,{type:"number",attrs:'min="0" max="100" step="1"'})+
@@ -1061,7 +1094,7 @@ function formContrato(c={},preCliente){
         formCliente({},id=>formContrato({...c,evento:keep.evento,dataEvento:keep.dataEvento,local:keep.local,convidados:keep.convidados,dataAssinatura:keep.dataAssinatura,valorTotal:parseBRL(keep.valorTotal)||c.valorTotal,pctEntrada:Number(keep.pctEntrada),obs:keep.obs,responsavelId:keep.responsavelId,contaRec:keep.contaRec,anexos},id),c.orcamentoId?((byId(S.orcamentos,c.orcamentoId)||{})._o||donoPara(keep.responsavelId)):donoPara(keep.responsavelId))};
     },
     onSubmit:async fd=>{
-      const o={clienteId:String(fd.get("clienteId")||""),evento:String(fd.get("evento")||"").trim(),dataEvento:String(fd.get("dataEvento")||""),local:String(fd.get("local")||"").trim(),
+      const o={clienteId:String(fd.get("clienteId")||""),empresaId:String(fd.get("empresaId")||empPadrao()),evento:String(fd.get("evento")||"").trim(),dataEvento:String(fd.get("dataEvento")||""),local:String(fd.get("local")||"").trim(),
         convidados:fd.get("convidados")?Number(fd.get("convidados")):null,dataAssinatura:String(fd.get("dataAssinatura")||""),valorTotal:parseBRL(fd.get("valorTotal")),
         pctEntrada:Number(fd.get("pctEntrada")),obs:String(fd.get("obs")||"").trim(),contaRec:fd.has("contaRec")?String(fd.get("contaRec")||""):(c.contaRec||""),responsavelId:String(fd.get("responsavelId")||""),orcamentoId:c.orcamentoId||null,anexos,status:String(fd.get("status")||c.status||"ativo")};
       need(o.clienteId,"Selecione o cliente.");need(o.evento,"Informe o nome do evento.");need(o.dataEvento,"Informe a data do evento.");
@@ -1158,7 +1191,7 @@ function formReceita(x={}){
   const clis=S.clientes.slice().sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR"));
   const novo=!x.id;const proxPadrao=proximoNumero("boleto");
   openDlg(novo?"Cobrança avulsa":"Editar parcela",
-   SEL("clienteId","Cliente",[["","—"],...clis.map(k=>[k.id,k.nome])],x.clienteId||"",{full:true})+
+   SEL("clienteId","Cliente",[["","—"],...clis.map(k=>[k.id,k.nome])],x.clienteId||"",{full:true})+(ADMIN()?SEL("empresaId","Empresa",empOpts(),x.id?empDe(x):(UI.emp||empPadrao()),{full:true}):"")+
    F("descricao","Descrição",x.descricao,{full:true,req:true,attrs:'placeholder="Ex.: Degustação, taxa extra, hora adicional"'})+
    F("valor","Valor (R$)",x.valor?brlIn(x.valor):"",{req:true,attrs:'inputmode="decimal" placeholder="0,00"'})+F("vencimento","Vencimento",x.vencimento||todayISO(),{type:"date",req:true})+
    F("numero","Nº do boleto",novo?proximoNumero("boleto"):(x.numero||""),{hint:novo?"Gerado na sequência. Apague se não for boleto.":""})+
@@ -1167,7 +1200,7 @@ function formReceita(x={}){
    (x.status==="pago"?F("pagoEm","Pago em",x.pagoEm,{type:"date"}):""),
    {registro:x,danger:novo?null:{label:"Excluir",fn:async()=>{dlg.close();if(await confirmBox(`Excluir a parcela <b>${esc(x.descricao)}</b> (${brl(x.valor)})?`))await act(()=>docRef("receber",x).delete(),"Parcela excluída")}},
     onSubmit:async fd=>{
-      const o={clienteId:String(fd.get("clienteId")||""),descricao:String(fd.get("descricao")||"").trim(),valor:parseBRL(fd.get("valor")),vencimento:String(fd.get("vencimento")||""),numero:String(fd.get("numero")||"").trim(),forma:String(fd.get("forma")||""),contaId:String(fd.get("contaId")||"")};
+      const o={clienteId:String(fd.get("clienteId")||""),...(fd.has("empresaId")?{empresaId:String(fd.get("empresaId"))}:{}),descricao:String(fd.get("descricao")||"").trim(),valor:parseBRL(fd.get("valor")),vencimento:String(fd.get("vencimento")||""),numero:String(fd.get("numero")||"").trim(),forma:String(fd.get("forma")||""),contaId:String(fd.get("contaId")||"")};
       if(fd.has("categoria"))o.categoria=String(fd.get("categoria"));
       if(fd.has("pagoEm"))o.pagoEm=String(fd.get("pagoEm"));
       need(o.descricao,"Informe a descrição.");need(!isNaN(o.valor)&&o.valor>0,"Informe o valor.");need(o.vencimento,"Informe o vencimento.");
@@ -1185,7 +1218,7 @@ function formDespesa(x={}){
   const novo=!x.id;
   const forn=[...new Set([...S.fornecedores.map(f=>f.nome),...S.pagar.map(p=>p.fornecedor)].filter(Boolean))].sort((a,b)=>a.localeCompare(b,"pt-BR"));
   openDlg(novo?"Nova conta a pagar":"Editar conta a pagar",
-   F("fornecedor","Fornecedor / favorecido",x.fornecedor,{full:true,req:true,attrs:'list="fornList"'})+`<datalist id="fornList">${forn.map(f=>`<option value="${esc(f)}">`).join("")}</datalist>`+
+   F("fornecedor","Fornecedor / favorecido",x.fornecedor,{full:true,req:true,attrs:'list="fornList"'})+`<datalist id="fornList">${forn.map(f=>`<option value="${esc(f)}">`).join("")}</datalist>`+SEL("empresaId","Empresa (CNPJ)",empOpts(),novo?(UI.emp||empPadrao()):empDe(x),{full:true})+
    F("descricao","Descrição",x.descricao,{full:true,attrs:'placeholder="Ex.: Carnes evento 26/09, NF 1234"'})+
    SEL("categoria","Categoria",CATS.map(c=>[c,c]),x.categoria||"Alimentos")+F("valor","Valor (R$)",x.valor?brlIn(x.valor):"",{req:true,attrs:'inputmode="decimal" placeholder="0,00"'})+
    F("vencimento","Vencimento",x.vencimento||todayISO(),{type:"date",req:true})+
@@ -1197,7 +1230,7 @@ function formDespesa(x={}){
    {registro:x,danger:novo?null:{label:"Excluir",fn:async()=>{dlg.close();if(await confirmBox(`Excluir <b>${esc(x.fornecedor)}</b> (${brl(x.valor)})?`))await act(()=>db.collection("pagar").doc(x.id).delete(),"Conta excluída")}},
     onOpen:f=>{const fi=$n(f,"fornecedor");if(!fi)return;fi.addEventListener("change",()=>{const fo=S.fornecedores.find(k=>normF(k.nome)===normF(fi.value));if(fo&&fo.categoria&&novo){const c=$n(f,"categoria");if(c)c.value=fo.categoria}})},
     onSubmit:async fd=>{
-      const o={fornecedor:String(fd.get("fornecedor")||"").trim(),descricao:String(fd.get("descricao")||"").trim(),categoria:String(fd.get("categoria")),valor:parseBRL(fd.get("valor")),vencimento:String(fd.get("vencimento")||""),forma:String(fd.get("forma")||""),contaId:String(fd.get("contaId")||""),prioridade:Number(fd.get("prioridade"))||0,contratoId:String(fd.get("contratoId")||"")};
+      const o={fornecedor:String(fd.get("fornecedor")||"").trim(),empresaId:String(fd.get("empresaId")||empPadrao()),descricao:String(fd.get("descricao")||"").trim(),categoria:String(fd.get("categoria")),valor:parseBRL(fd.get("valor")),vencimento:String(fd.get("vencimento")||""),forma:String(fd.get("forma")||""),contaId:String(fd.get("contaId")||""),prioridade:Number(fd.get("prioridade"))||0,contratoId:String(fd.get("contratoId")||"")};
       if(fd.has("pagoEm"))o.pagoEm=String(fd.get("pagoEm"));
       need(o.fornecedor,"Informe o fornecedor.");need(o.prioridade,"Escolha a prioridade (1, 2 ou 3).");need(!isNaN(o.valor)&&o.valor>0,"Informe o valor.");need(o.vencimento,"Informe o vencimento.");
       const rep=Math.min(24,Math.max(1,Number(fd.get("repetir"))||1));
@@ -1395,13 +1428,13 @@ const CORES=["#CC092F","#EC7000","#3FA110","#0B6E4F","#00A868","#1F4E9C","#6B4FA
 function formConta(c={}){
   const novo=!c.id;
   openDlg(novo?"Nova conta bancária":"Editar conta bancária",
-   F("nome","Nome de exibição",c.nome,{full:true,req:true,attrs:'placeholder="Ex.: Bradesco"'})+F("agencia","Agência",c.agencia)+F("numero","Conta",c.numero)+
+   F("nome","Nome de exibição",c.nome,{full:true,req:true,attrs:'placeholder="Ex.: Bradesco"'})+SEL("empresaId","Empresa (CNPJ)",empOpts(),c.empresaId||UI.emp||empPadrao(),{full:true})+F("agencia","Agência",c.agencia)+F("numero","Conta",c.numero)+
    `<div class="fld full"><label>Cor</label><div class="cores">${CORES.map(k=>`<label class="cor"><input type="radio" name="cor" value="${k}" ${(c.cor||CORES[S.contas.length%CORES.length])===k?"checked":""}><span style="background:${k}"></span></label>`).join("")}</div></div>`+
    (novo?F("saldoInicial","Saldo atual (R$)","",{attrs:'inputmode="decimal" placeholder="0,00"',hint:"Opcional: o saldo de hoje no banco"})+F("saldoData","Saldo em",todayISO(),{type:"date"}):"")+
    F("ofxId","Identificação no extrato OFX",c.ofxId||"",{full:true,hint:"Preenchida sozinha ao importar o primeiro extrato desta conta."})+
    (novo?"":SEL("ativo","Situação",[["1","Ativa"],["0","Inativa"]],c.ativo===false?"0":"1",{full:true})),
    {onSubmit:async fd=>{
-     const o={nome:String(fd.get("nome")||"").trim(),agencia:String(fd.get("agencia")||"").trim(),numero:String(fd.get("numero")||"").trim(),cor:String(fd.get("cor")||CORES[0]),ofxId:String(fd.get("ofxId")||"").trim()};
+     const o={nome:String(fd.get("nome")||"").trim(),empresaId:String(fd.get("empresaId")||empPadrao()),agencia:String(fd.get("agencia")||"").trim(),numero:String(fd.get("numero")||"").trim(),cor:String(fd.get("cor")||CORES[0]),ofxId:String(fd.get("ofxId")||"").trim()};
      need(o.nome,"Informe o nome da conta.");
      if(fd.has("ativo"))o.ativo=fd.get("ativo")!=="0";
      if(novo){const si=parseBRL(fd.get("saldoInicial"));if(!isNaN(si)){o.saldoInicial=si;o.saldoData=String(fd.get("saldoData")||todayISO())}}
@@ -2610,6 +2643,7 @@ document.addEventListener("change",ev=>{
   if(el.id==="rc"){UI.rc=el.checked;render();return}
   if(el.id==="dy"){UI.dy=Number(el.value);render();return}
   if(el.id==="cm"){UI.cm=el.value;render();return}
+  if(el.id==="empSel"){UI.emp=el.value;try{localStorage.setItem("bosco.emp",UI.emp)}catch(e){}render();return}
   if(el.classList&&el.classList.contains("cpct")){const e=byId(S.equipe,el.dataset.eq);const v=Number(String(el.value).replace(",","."));if(!e||isNaN(v)||v<0||v>100){toast("Percentual inválido");return}
     act(()=>db.collection("equipe").doc(e.id).set({...strip(e),comissaoPct:v,...stamp()}),`Comissão de ${e.nome}: ${pctTxt(v)}`);return}
   if(["rb","pb","pp","ps","or","cr","rs"].includes(el.id)){UI[el.id]=el.value;render();return}
@@ -2734,6 +2768,7 @@ auth.onAuthStateChanged(async u=>{
   const who=document.getElementById("who");
   who.innerHTML=`Conectado como ${esc(u.displayName||perfil.nome||email)} · ${S.role==="admin"?"gestão":"comercial"} <button class="lnk who-out" id="sairBtn">Sair</button>`;
   document.getElementById("sairBtn").onclick=()=>auth.signOut();
+  try{UI.emp=localStorage.getItem("bosco.emp")||""}catch(e){}
   S.dbState="on";render();
   const onErr=e=>{console.warn("assinatura",e&&e.code)};
   const simples=c=>db.collection(c).onSnapshot(snap=>{S[c]=snap.docs.map(d=>({...d.data(),id:d.id}));S.loaded[c]=true;if(["equipe","donos"].includes(c))atualizarPastas();agendar()},onErr);
