@@ -307,6 +307,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
 .gate-err{color:var(--danger,#b42318);font-size:13px;margin-top:12px;min-height:1em}
 .who-out{margin-left:6px}
 [hidden]{display:none!important}
+.prio-9{background:color-mix(in srgb,var(--bad,#b42318) 14%,transparent)!important;color:var(--bad,#b42318)!important}
 .ass-box{border:1px dashed var(--line);border-radius:10px;padding:10px 12px;font-size:13.5px}.ass-box.pend{border-color:var(--warn,#c08a2b);background:color-mix(in srgb,var(--warn,#c08a2b) 8%,transparent)}.ass-box.ok{border-color:var(--ok,#2f8a5b);color:var(--ok,#2f8a5b)}
 .chk{display:flex;gap:8px;align-items:center;cursor:pointer}
 .emp-bar{display:flex;justify-content:flex-end;align-items:center;gap:10px;margin:-6px 0 8px}.emp-sel{width:auto;min-width:200px}
@@ -366,8 +367,11 @@ const S={clientes:[],contratos:[],receber:[],pagar:[],extrato:[],contas:[],trans
 const UI={rf:"abertos",rq:"",pf:"abertos",pq:"",cf:"proximos",cq:"",kq:"",xf:"pendentes",xt:"todas",xm:"",xq:"",xlim:150,xb:"",rb:"",pb:"",pp:"",ps:"venc",of:"abertos",oq:"",or:"",ov:"lista",op:"3m",cr:"",rp:"ano",rs:"data",rc:false,rv:"eventos",dm:"realizado",dy:0};
 let db=null,userCap=null,assetsCap=null,dlCap=null;
 
-const PRIO={1:"Máxima",2:"Média",3:"Baixa"};
-const prioTag=p=>PRIO[p]?`<span class="prio prio-${p}" title="Prioridade ${p} · ${PRIO[p]}">${p} · ${PRIO[p]}</span>`:"";
+const PRIO={1:"Máxima",2:"Média",3:"Baixa",9:"Spam"};
+const prioTag=p=>Number(p)===9?`<span class="prio prio-9" title="Boleto não reconhecido / spam">🚫 Spam</span>`:PRIO[p]?`<span class="prio prio-${p}" title="Prioridade ${p} · ${PRIO[p]}">${p} · ${PRIO[p]}</span>`:"";
+const dgt=t=>String(t||"").replace(/\D/g,"");
+function spamLista(){return S.config.ddaSpam||[]}
+function ehSpam(nome,cnpj){const n=normF(nome);return spamLista().some(b=>(b.cnpj&&cnpj&&b.cnpj===dgt(cnpj))||(b.nome&&n&&(n===b.nome||(n.length>=12&&b.nome.startsWith(n))||(b.nome.length>=12&&n.startsWith(b.nome)))))}
 const CATS=["Alimentos","Bebidas","Equipe / freelancers","Folha e encargos","Aluguel e contas","Impostos","Marketing","Manutenção","Equipamentos","Devoluções","Outros"];
 const NAV=[
  ["painel","Painel",'<path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 3v6h8V3z"/>'],
@@ -897,6 +901,16 @@ function categoriaDDA(n){n=normF(n);
   if(/manuten|reforma|eletric|hidraul/.test(n))return "Manutenção";
   return "Outros";
 }
+async function marcarSpam(x){
+  if(!x)return;
+  openDlg("Marcar como spam",`<p class="fld full" style="margin:0"><b>${esc(x.fornecedor)}</b> · ${brl(x.valor)} · vence ${fmtD(x.vencimento)}<br><span class="muted s">O boleto sai dos totais, alertas e do saldo previsto, e fica guardado com a marca 🚫 Spam (dá para desfazer).</span></p>
+   <label class="chk fld full"><input type="checkbox" name="bloq" checked> Marcar automaticamente como spam os próximos boletos deste beneficiário na importação do DDA</label>`,
+   {submit:"Marcar como spam",onSubmit:async fd=>{
+     await write(async()=>{
+       await db.collection("pagar").doc(x.id).set({...strip(x),prioridade:9,spam:true,status:"cancelado",...stamp()});
+       if(fd.get("bloq")&&!ehSpam(x.fornecedor,x.cnpjBenef)){const b={nome:normF(x.fornecedor),rotulo:x.fornecedor,cnpj:dgt(x.cnpjBenef)};await db.doc("config/geral").set({...S.config,ddaSpam:[...spamLista(),b],...stamp()})}
+     });toast("Marcado como spam")}});
+}
 function formDDA(){
   openDlg("Importar DDA",`<p class="fld full hint" style="margin:0">Exporte a lista de boletos do DDA no site do banco (PDF, CSV ou texto) e escolha o arquivo. Também dá para copiar a tabela do site do banco e colar abaixo. Nada é lançado antes de você conferir.</p>
    <div class="fld full"><label for="f_ddaArq">Arquivo do banco</label><input type="file" id="f_ddaArq" accept=".pdf,.csv,.txt,application/pdf,text/csv,text/plain"></div>`+
@@ -913,14 +927,15 @@ function previaDDA(L,empDet){
   const ja=new Set(S.pagar.map(p=>p.ddaKey).filter(Boolean));
   const linhas=L.map((x,i)=>{const k=chaveDDA(x);const f=fornecedorDDA(x.benef,x.cnpj);
     const dup=ja.has(k)||S.pagar.some(p=>p.vencimento===x.venc&&p.valor===x.valor&&f&&normF(p.fornecedor)===normF(f.nome));
-    return {...x,i,k,dup,forn:f?f.nome:x.benef,fornId:f?f.id:"",novo:!f,cat:(f&&f.categoria)||categoriaDDA(x.benef)}});
+    const sp=ehSpam(x.benef,x.cnpj)||(f&&ehSpam(f.nome,""));
+    return {...x,i,k,dup,sp,forn:f?f.nome:x.benef,fornId:f?f.id:"",novo:!f&&!sp,cat:(f&&f.categoria)||categoriaDDA(x.benef)}});
   const novos=linhas.filter(l=>!l.dup);
   const opt=(arr,v)=>arr.map(c=>`<option ${c===v?"selected":""}>${esc(c)}</option>`).join("");
   openDlg(`Conferir boletos do DDA · ${novos.length} novo(s)`,`<div class="fld full"><div class="tbl-wrap" style="max-height:55vh;overflow:auto"><table class="dda"><thead><tr><th><input type="checkbox" id="ddaAll" checked aria-label="Marcar todos"></th><th>Fornecedor</th><th>Documento</th><th>Vencimento</th><th class="r">Valor</th><th>Categoria</th><th>Prioridade</th></tr></thead><tbody>
    ${linhas.map(l=>`<tr class="${l.dup?"muted":""}"><td><input type="checkbox" data-dda="${l.i}" ${l.dup?"":"checked"} aria-label="Lançar ${esc(l.benef)}"></td>
-     <td><input class="search" style="min-width:210px" data-ddaf="${l.i}" value="${esc(l.forn)}">${l.dup?`<div class="s">já lançado</div>`:l.novo?`<div class="s">fornecedor novo · será cadastrado</div>`:""}</td>
+     <td><input class="search" style="min-width:210px" data-ddaf="${l.i}" value="${esc(l.forn)}">${l.dup?`<div class="s">já lançado</div>`:l.sp?`<div class="s" style="color:var(--bad)">🚫 spam conhecido · entra marcado como spam</div>`:l.novo?`<div class="s">fornecedor novo · será cadastrado</div>`:""}</td>
      <td class="num s">${esc(l.doc)}</td><td class="num">${fmtD(l.venc)}</td><td class="r num">${brl(l.valor)}</td>
-     <td><select data-ddac="${l.i}">${opt(CATS,l.cat)}</select></td><td><select data-ddap="${l.i}"><option value="1">1 · Máxima</option><option value="2" selected>2 · Média</option><option value="3">3 · Baixa</option></select></td></tr>`).join("")}</tbody></table></div>
+     <td><select data-ddac="${l.i}">${opt(CATS,l.cat)}</select></td><td><select data-ddap="${l.i}"><option value="1">1 · Máxima</option><option value="2" ${l.sp?"":"selected"}>2 · Média</option><option value="3">3 · Baixa</option><option value="9" ${l.sp?"selected":""}>🚫 Spam</option></select></td></tr>`).join("")}</tbody></table></div>
    <span class="hint">Total marcado: <b id="ddaTot" class="num"></b></span></div>`+
    SEL("empresaId","Lançar na empresa",empOpts(),empDet||UI.emp||empPadrao(),{full:true})+`<p class="fld full hint" style="margin:-6px 0 0">${empDet?"Empresa identificada pelo pagador do arquivo do banco.":"Não identifiquei a empresa no arquivo. Confira antes de lançar."}</p>`,
    {submit:"Lançar em A pagar",onOpen:f=>{
@@ -936,25 +951,25 @@ function previaDDA(L,empDet){
         for(const l of sel){
           const nome=f.querySelector(`[data-ddaf="${l.i}"]`).value.trim()||l.benef;const cat=f.querySelector(`[data-ddac="${l.i}"]`).value;const pri=Number(f.querySelector(`[data-ddap="${l.i}"]`).value)||2;
           let fid=l.fornId;const kn=normF(nome);
-          if(!fid){const ex=S.fornecedores.find(k=>normF(k.nome)===kn)||cache[kn];
+          if(!fid&&pri!==9){const ex=S.fornecedores.find(k=>normF(k.nome)===kn)||cache[kn];
             if(ex)fid=ex.id;else{const r=db.collection("fornecedores").doc();await r.set({nome,doc:l.cnpj?l.cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,"$1.$2.$3/$4-$5"):"",categoria:cat,origem:"DDA",criadoEm:new Date().toISOString(),criadoPor:S.me||null});fid=r.id;cache[kn]={id:r.id};nf++}}
-          await db.collection("pagar").doc().set({fornecedor:nome,fornecedorId:fid,descricao:`Boleto DDA${l.doc?" · doc. "+l.doc:""}`,documento:l.doc,empresaId:empId,linhaDigitavel:l.linha||"",cnpjBenef:l.cnpj||"",categoria:cat,valor:l.valor,vencimento:l.venc,prioridade:pri,status:"aberto",origem:"DDA",ddaKey:l.k,criadoEm:new Date().toISOString(),criadoPor:S.me||null});
+          await db.collection("pagar").doc().set({fornecedor:nome,fornecedorId:fid,descricao:`Boleto DDA${l.doc?" · doc. "+l.doc:""}`,documento:l.doc,empresaId:empId,linhaDigitavel:l.linha||"",cnpjBenef:l.cnpj||"",categoria:cat,valor:l.valor,vencimento:l.venc,prioridade:pri,status:pri===9?"cancelado":"aberto",spam:pri===9,origem:"DDA",ddaKey:l.k,criadoEm:new Date().toISOString(),criadoPor:S.me||null});
         }});
       dlg.style.maxWidth="";dlg.style.width="";
       toast(`${sel.length} boleto(s) lançado(s) em A pagar${nf?` · ${nf} fornecedor(es) novo(s) cadastrado(s)`:""}`);
     }});
 }
 function vPagar(){
-  const list=filterList(S.pagar,UI.pf,UI.pq,x=>[x.fornecedor,x.descricao,x.categoria,x.forma].join(" ")).filter(x=>(!UI.pb||x.contaId===UI.pb)&&(!UI.pp||String(x.prioridade||"")===UI.pp));
+  const list=filterList(S.pagar,UI.pp==="9"?"todos":UI.pf,UI.pq,x=>[x.fornecedor,x.descricao,x.categoria,x.forma].join(" ")).filter(x=>(!UI.pb||x.contaId===UI.pb)&&(!UI.pp||String(x.prioridade||"")===UI.pp));
   if(UI.ps==="prio")list.sort((a,b)=>((a.status==="pago")-(b.status==="pago"))||((a.prioridade||9)-(b.prioridade||9))||(a.vencimento||"").localeCompare(b.vencimento||""));
   const tot=list.reduce((s,x)=>s+(x.valor||0),0);
   const body=list.length?`<div class="tbl-wrap"><table><thead><tr><th>Vencimento</th><th>Fornecedor / descrição</th><th>Categoria</th><th class="r">Valor</th><th>Situação</th><th class="r"></th></tr></thead><tbody>${list.map(x=>{const st=status(x);
     return `<tr class="${rowCls(st)}"><td class="num">${fmtD(x.vencimento)}</td><td><div class="t">${esc(x.fornecedor)} ${prioTag(x.prioridade)}</div><div class="s">${esc(x.descricao||"")}</div>${x.contratoId?`<div style="margin-top:3px">${evtTag(x.contratoId)}</div>`:""}</td><td>${esc(x.categoria||"")}</td><td class="r num">${brl(x.valor)}</td>
     <td>${pill(st)}${st==="pago"?`<div class="s">${fmtD(x.pagoEm)}${x.comprovanteId?" · "+comprovanteLink(x):""}</div>`:""}${metaPg(x)}</td>
-    <td class="r"><div class="row-act">${x.linhaDigitavel&&x.status!=="pago"?`<button class="btn sm ghost" data-a="copiar-linha" data-id="${x.id}" title="${esc(x.linhaDigitavel)}">Copiar código</button>`:""}${W()&&x.status!=="pago"?`<button class="btn sm primary" data-a="pagar-desp" data-id="${x.id}">Marcar pago</button>`:""}${W()&&x.status==="pago"?`<button class="btn sm ghost" data-a="desfazer-desp" data-id="${x.id}">Desfazer</button>`:""}${W()?`<button class="btn sm ghost" data-a="edit-desp" data-id="${x.id}">Editar</button>`:""}</div></td></tr>`}).join("")}</tbody></table></div>`
+    <td class="r"><div class="row-act">${x.linhaDigitavel&&x.status!=="pago"?`<button class="btn sm ghost" data-a="copiar-linha" data-id="${x.id}" title="${esc(x.linhaDigitavel)}">Copiar código</button>`:""}${W()&&x.status!=="pago"&&!x.spam?`<button class="btn sm primary" data-a="pagar-desp" data-id="${x.id}">Marcar pago</button>`:""}${W()&&x.status!=="pago"&&!x.spam&&x.status!=="cancelado"?`<button class="btn sm ghost" data-a="spam" data-id="${x.id}" title="Boleto não reconhecido">🚫 Spam</button>`:""}${W()&&x.spam?`<button class="btn sm ghost" data-a="nao-spam" data-id="${x.id}">Não é spam</button>`:""}${W()&&x.status==="pago"?`<button class="btn sm ghost" data-a="desfazer-desp" data-id="${x.id}">Desfazer</button>`:""}${W()?`<button class="btn sm ghost" data-a="edit-desp" data-id="${x.id}">Editar</button>`:""}</div></td></tr>`}).join("")}</tbody></table></div>`
    :`<div class="empty"><strong>${S.pagar.length?"Nada neste filtro":"Nenhuma conta a pagar cadastrada"}</strong>${S.pagar.length?"":"Registre fornecedores, folha, aluguel e impostos para ver o saldo previsto no painel."}${W()&&!S.pagar.length?`<button class="btn primary" data-a="nova-despesa">+ Cadastrar conta a pagar</button>`:""}</div>`;
   return `<div class="head"><div><h1>A pagar</h1><p class="sub">Fornecedores, equipe, contas fixas e impostos.</p></div><div class="actions"><button class="btn" data-a="csv" data-v="pagar">Exportar planilha</button>${W()?`<button class="btn" data-a="dda">Importar DDA</button><button class="btn primary" data-a="nova-despesa">+ Conta a pagar</button>`:""}</div></div>
-  <div class="toolbar"><div class="chips">${chipsFor("pf",UI.pf,S.pagar)}</div><div class="chips"><select class="search" style="width:auto" id="pp" aria-label="Prioridade"><option value="">Todas as prioridades</option>${[1,2,3].map(n=>`<option value="${n}" ${UI.pp===String(n)?"selected":""}>${n} · ${PRIO[n]}</option>`).join("")}</select><select class="search" style="width:auto" id="ps" aria-label="Ordenar"><option value="venc" ${UI.ps==="venc"?"selected":""}>Ordenar por vencimento</option><option value="prio" ${UI.ps==="prio"?"selected":""}>Ordenar por prioridade</option></select>${bankFilter("pb")}<input class="search" id="pq" type="search" placeholder="Buscar fornecedor ou categoria" value="${esc(UI.pq)}" data-q="pq"></div></div>
+  <div class="toolbar"><div class="chips">${chipsFor("pf",UI.pf,S.pagar)}</div><div class="chips"><select class="search" style="width:auto" id="pp" aria-label="Prioridade"><option value="">Todas as prioridades</option>${[1,2,3,9].map(n=>`<option value="${n}" ${UI.pp===String(n)?"selected":""}>${n===9?"🚫 Spam":n+" · "+PRIO[n]}</option>`).join("")}</select><select class="search" style="width:auto" id="ps" aria-label="Ordenar"><option value="venc" ${UI.ps==="venc"?"selected":""}>Ordenar por vencimento</option><option value="prio" ${UI.ps==="prio"?"selected":""}>Ordenar por prioridade</option></select>${bankFilter("pb")}<input class="search" id="pq" type="search" placeholder="Buscar fornecedor ou categoria" value="${esc(UI.pq)}" data-q="pq"></div></div>
   <section class="panel">${body}${list.length?`<div class="panel-b" style="border-top:1px solid var(--line);display:flex;justify-content:space-between"><span class="muted">${list.length} item(ns)</span><b class="num">${brl(tot)}</b></div>`:""}</section>`;
 }
 
@@ -1262,7 +1277,7 @@ function formDespesa(x={}){
    F("descricao","Descrição",x.descricao,{full:true,attrs:'placeholder="Ex.: Carnes evento 26/09, NF 1234"'})+
    SEL("categoria","Categoria",CATS.map(c=>[c,c]),x.categoria||"Alimentos")+F("valor","Valor (R$)",x.valor?brlIn(x.valor):"",{req:true,attrs:'inputmode="decimal" placeholder="0,00"'})+
    F("vencimento","Vencimento",x.vencimento||todayISO(),{type:"date",req:true})+
-   `<div class="fld full"><span class="lbl-like">Prioridade *</span><div class="seg" role="radiogroup" aria-label="Prioridade">${[1,2,3].map(n=>`<label class="seg-o prio-${n}"><input type="radio" name="prioridade" value="${n}" ${Number(x.prioridade||(novo?0:0))===n?"checked":""}><span>${n} · ${PRIO[n]}</span></label>`).join("")}</div></div>`+
+   `<div class="fld full"><span class="lbl-like">Prioridade *</span><div class="seg" role="radiogroup" aria-label="Prioridade">${[1,2,3,9].map(n=>`<label class="seg-o prio-${n}"><input type="radio" name="prioridade" value="${n}" ${Number(x.prioridade||(novo?0:0))===n?"checked":""}><span>${n===9?"🚫 Spam / não reconheço":n+" · "+PRIO[n]}</span></label>`).join("")}</div><span class="hint">Spam: boleto que você não reconhece. Sai dos totais e alertas e fica guardado com essa marca.</span></div>`+
    FORMA_SEL("forma","Forma de pagamento",x.forma,"pagar")+CONTA_SEL("contaId","Pagar pelo banco",x.contaId)+
    EVT_SEL("contratoId","Evento (custo direto)",x.contratoId,{full:true})+
    (novo?F("repetir","Repetir por quantos meses",1,{type:"number",attrs:'min="1" max="24"',hint:"Para contas fixas (aluguel, contador…)"}):"")+
@@ -1272,12 +1287,13 @@ function formDespesa(x={}){
     onSubmit:async fd=>{
       const o={fornecedor:String(fd.get("fornecedor")||"").trim(),empresaId:String(fd.get("empresaId")||empPadrao()),descricao:String(fd.get("descricao")||"").trim(),categoria:String(fd.get("categoria")),valor:parseBRL(fd.get("valor")),vencimento:String(fd.get("vencimento")||""),forma:String(fd.get("forma")||""),contaId:String(fd.get("contaId")||""),prioridade:Number(fd.get("prioridade"))||0,contratoId:String(fd.get("contratoId")||"")};
       if(fd.has("pagoEm"))o.pagoEm=String(fd.get("pagoEm"));
-      need(o.fornecedor,"Informe o fornecedor.");need(o.prioridade,"Escolha a prioridade (1, 2 ou 3).");need(!isNaN(o.valor)&&o.valor>0,"Informe o valor.");need(o.vencimento,"Informe o vencimento.");
+      if(o.prioridade===9){o.status="cancelado";o.spam=true}else if(!novo&&x.spam){o.status="aberto";o.spam=false}
+      need(o.fornecedor,"Informe o fornecedor.");need(o.prioridade,"Escolha a prioridade (1, 2, 3 ou Spam).");need(!isNaN(o.valor)&&o.valor>0,"Informe o valor.");need(o.vencimento,"Informe o vencimento.");
       const rep=Math.min(24,Math.max(1,Number(fd.get("repetir"))||1));
       await write(async()=>{
         if(novo){for(let i=0;i<rep;i++){const [y,m,d]=o.vencimento.split("-").map(Number);const dt=new Date(y,m-1+i,1);const last=new Date(dt.getFullYear(),dt.getMonth()+1,0).getDate();
           const venc=dt.getFullYear()+"-"+pad(dt.getMonth()+1)+"-"+pad(Math.min(d,last));
-          await db.collection("pagar").doc().set({...o,vencimento:venc,descricao:o.descricao+(rep>1?` (${i+1}/${rep})`:""),status:"aberto",criadoEm:new Date().toISOString(),criadoPor:S.me||null})}}
+          await db.collection("pagar").doc().set({...o,vencimento:venc,descricao:o.descricao+(rep>1?` (${i+1}/${rep})`:""),status:o.status||"aberto",criadoEm:new Date().toISOString(),criadoPor:S.me||null})}}
         else await db.collection("pagar").doc(x.id).set({...strip(x),...o,...stamp()});
       });
       toast(novo?(rep>1?`${rep} contas criadas`:"Conta cadastrada"):"Conta atualizada");
@@ -2394,6 +2410,7 @@ function vControle(){
     return head("Regras usadas nos cálculos do sistema.",W()?`<button class="btn primary" data-a="cfg-geral">Editar</button>`:"")+`<section class="panel"><div class="panel-b">
       <p><b>Multa por atraso:</b> ${pctTxt(Number(c.multaPct)||0)} · <b>Juros:</b> ${pctTxt(Number(c.jurosMesPct)||0)} ao mês (proporcional aos dias)</p>
       <p><b>Comissão padrão:</b> ${pctTxt(Number(c.comissaoPct)||0)} · <b>Base:</b> ${(c.comissaoBase||"fechado")==="recebido"?"valores recebidos no mês":"contratos assinados no mês"}</p>
+      <p><b>Beneficiários marcados como spam no DDA:</b> ${spamLista().length?spamLista().map((b,i)=>`<span class="pill" style="margin:2px 4px 2px 0">${esc(b.rotulo||b.nome)}${W()?` <button class="lnk s" data-a="desbloq" data-v="${i}" title="Desbloquear">×</button>`:""}</span>`).join(""):"nenhum"}</p>
       <p><b>E-mail diário (8h, seg. a sáb.):</b> gestão ${c.alertaGestao===false?"desligado":"ligado"} · vendedores ${c.alertaVendedores===false?"desligado":"ligado"}</p>
       <p class="muted s">A multa e os juros aparecem em “A receber” nas parcelas atrasadas e entram automaticamente na mensagem de cobrança.</p></div></section>`;
   }
@@ -2662,6 +2679,9 @@ document.addEventListener("click",ev=>{
     case "cb":UI.cb=v;render();break;
     case "kt":UI.kt=v;UI.kq="";render();break;
     case "dda":formDDA();break;
+    case "spam":marcarSpam(byId(S.pagar,id));break;
+    case "nao-spam":{const x=byId(S.pagar,id);if(x)act(()=>db.collection("pagar").doc(x.id).set({...strip(x),spam:false,status:"aberto",prioridade:2,...stamp()}),"Voltou para contas em aberto")}break;
+    case "desbloq":{const L=spamLista().filter((b,i)=>String(i)!==v);act(()=>db.doc("config/geral").set({...S.config,ddaSpam:L,...stamp()}),"Beneficiário desbloqueado")}break;
     case "ver-assinar":UI.cf="assinar";location.hash="contratos";render();break;
     case "copiar-linha":{const x=byId(S.pagar,id);if(x&&x.linhaDigitavel){const t=x.linhaDigitavel.replace(/\D/g,"");(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast("Código de barras copiado"),()=>prompt("Copie o código:",t))}break}
     case "novo-forn":formFornecedor();break;
