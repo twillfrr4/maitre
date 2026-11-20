@@ -2740,6 +2740,7 @@ const DOMINIO="boscoeventos.com.br",FIN="financeiro@"+DOMINIO;
 const gate=document.getElementById("gate");
 function porta(msg,{erro="",trocar=false,botao=true,form=false}={}){gate.hidden=false;document.getElementById("gateReq").style.display=form?"":"none";document.getElementById("gateMsg").innerHTML=msg;document.getElementById("gateErr").textContent=erro;document.getElementById("gateBtn").style.display=botao?"":"none";document.getElementById("gateOut").style.display=trocar?"":"none"}
 const MSG0=document.getElementById("gateMsg").innerHTML;
+porta("Conferindo seu acesso…",{botao:false});
 dlCap={save:async({filename,data})=>{const u=URL.createObjectURL(data);const a=document.createElement("a");a.href=u;a.download=filename||"arquivo";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000)}};
 if(!window.firebase){porta("Não foi possível carregar o sistema.",{erro:"Verifique a internet e recarregue a página.",botao:false});return}
 firebase.initializeApp(FIREBASE);
