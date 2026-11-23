@@ -2766,7 +2766,7 @@ dlCap={save:async({filename,data})=>{const u=URL.createObjectURL(data);const a=d
 if(!window.firebase){porta("Não foi possível carregar o sistema.",{erro:"Verifique a internet e recarregue a página.",botao:false});return}
 firebase.initializeApp(FIREBASE);
 const RECAPTCHA_SITE="6Ldz8y4uAAAAAE5Q28i2DHJwvsOjm5pwzSagDex3";
-try{if(firebase.appCheck&&RECAPTCHA_SITE)firebase.appCheck().activate(new firebase.appCheck.ReCaptchaV3Provider(RECAPTCHA_SITE),true)}catch(e){console.warn("appcheck",e)}
+try{if(firebase.appCheck&&RECAPTCHA_SITE)firebase.appCheck().activate(new firebase.appCheck.ReCaptchaEnterpriseProvider(RECAPTCHA_SITE),true)}catch(e){console.warn("appcheck",e)}
 const auth=firebase.auth();
 db=firebase.firestore();
 db.settings({ignoreUndefinedProperties:true,merge:true});
