@@ -960,6 +960,78 @@ function previaDDA(L,empDet){
       toast(`${sel.length} boleto(s) lançado(s) em A pagar${nf?` · ${nf} fornecedor(es) novo(s) cadastrado(s)`:""}`);
     }});
 }
+/* ---------- Equipe / freelancers em lote (colar da planilha) ---------- */
+function lerLote(txt){
+  const ehValor=c=>{const s=c.replace(/R\$|\s/g,"");if(!/^-?[\d.,]+$/.test(s)||!/\d/.test(s))return false;
+    const dig=s.replace(/\D/g,"");if(!/[.,]\d{1,2}$/.test(s)&&dig.length>6)return false;if(/^\d{2}[./]\d{2}([./]\d{2,4})?$/.test(s))return false;const v=parseBRL(s);return !isNaN(v)&&v>0};
+  const ehData=c=>/^\d{1,2}\/\d{1,2}(\/\d{2,4})?$/.test(c.trim());
+  const isoData=c=>{const [d,m,y]=c.trim().split("/");const a=!y?todayISO().slice(0,4):y.length===2?"20"+y:y;return a+"-"+pad(m)+"-"+pad(d)};
+  const out=[];let ign=0;
+  for(const raw of String(txt||"").split(/\r?\n/)){
+    if(!raw.trim())continue;
+    let cel=raw.includes("\t")?raw.split("\t"):raw.includes(";")?raw.split(";"):raw.split(/\s{2,}/);
+    cel=cel.map(c=>c.trim()).filter(Boolean);
+    if(cel.length===1){const m=cel[0].match(/^(.*?[A-Za-zÀ-ú].*?)\s+(R\$\s*)?([\d.]+(,\d{1,2})?)$/);if(m)cel=[m[1].replace(/[-–:]+$/,"").trim(),m[3]]}
+    const iv=cel.map(ehValor).lastIndexOf(true);
+    const nomeI=cel.findIndex((c,i)=>i!==iv&&/[A-Za-zÀ-ú]{2}/.test(c)&&!ehData(c));
+    if(iv<0||nomeI<0||/^(sub)?total/i.test(cel[nomeI])){ign++;continue}
+    const di=cel.findIndex(ehData);
+    const resto=cel.filter((c,i)=>i!==iv&&i!==nomeI&&i!==di);
+    out.push({nome:cel[nomeI],valor:parseBRL(cel[iv]),venc:di>=0?isoData(cel[di]):"",desc:resto.join(" · ")});
+  }
+  return {itens:out,ign};
+}
+function formLoteEquipe(){
+  openDlg("Lançar equipe em lote",`<p class="fld full hint" style="margin:0">Na planilha, selecione as linhas (nome, valor e, se quiser, função, PIX ou data) e copie com Ctrl+C. Cole abaixo com Ctrl+V. Linhas de título e de total são ignoradas. Nada é lançado antes de você conferir.</p>`+
+   TA("cola","Linhas copiadas da planilha","")+
+   EVT_SEL("contratoId","Evento (opcional)","",{full:true})+
+   SEL("empresaId","Empresa (CNPJ)",empOpts(),UI.emp||empPadrao(),{full:true})+
+   SEL("categoria","Categoria",CATS.map(c=>[c,c]),"Equipe / freelancers")+
+   F("vencimento","Pagar em",todayISO(),{type:"date",req:true,hint:"Usado quando a linha não tiver data"})+
+   FORMA_SEL("forma","Forma de pagamento","PIX","pagar")+CONTA_SEL("contaId","Pagar pelo banco","")+
+   `<label class="chk fld full"><input type="checkbox" name="jaPago"> Já foram pagos (lança como pago na data acima)</label>`,
+   {submit:"Conferir",onSubmit:async fd=>{
+      const r=lerLote(fd.get("cola"));
+      need(r.itens.length,"Não encontrei nenhuma linha com nome e valor. Copie da planilha as colunas do nome e do valor.");
+      const op={contratoId:String(fd.get("contratoId")||""),empresaId:String(fd.get("empresaId")||empPadrao()),categoria:String(fd.get("categoria")||"Equipe / freelancers"),
+        venc:String(fd.get("vencimento")||todayISO()),forma:String(fd.get("forma")||""),contaId:String(fd.get("contaId")||""),pago:!!fd.get("jaPago")};
+      need(!op.pago||op.contaId,"Para lançar como pago, escolha o banco de onde saiu o pagamento.");
+      setTimeout(()=>previaLote(r,op),60);
+   }});
+}
+function previaLote(r,op){
+  const L=r.itens.map((x,i)=>{const venc=x.venc||op.venc;
+    const dup=S.pagar.some(p=>p.status!=="cancelado"&&normF(p.fornecedor)===normF(x.nome)&&p.valor===x.valor&&(p.contratoId||"")===op.contratoId&&p.vencimento===venc);
+    return {...x,i,venc,dup}});
+  const ev=op.contratoId&&byId(S.contratos,op.contratoId);
+  openDlg(`Conferir lançamentos · ${L.length} pessoa(s)`,`<p class="fld full hint" style="margin:0"><span>${ev?`Evento: <b>${esc(ev.evento)}</b> · `:""}${esc(op.categoria)} · ${op.pago?"entram como <b>pagos</b>":"entram <b>em aberto</b> em A pagar"}${r.ign?` · ${r.ign} linha(s) de título/total ignorada(s)`:""}</span></p>
+   <div class="fld full"><div class="tbl-wrap" style="max-height:55vh;overflow:auto"><table class="dda"><thead><tr><th><input type="checkbox" id="ltAll" checked aria-label="Marcar todos"></th><th>Nome</th><th>Descrição</th><th>Data</th><th class="r">Valor (R$)</th></tr></thead><tbody>
+   ${L.map(l=>`<tr class="${l.dup?"muted":""}"><td><input type="checkbox" data-lt="${l.i}" ${l.dup?"":"checked"} aria-label="Lançar ${esc(l.nome)}"></td>
+     <td><input class="search" style="min-width:180px" data-ltn="${l.i}" value="${esc(l.nome)}">${l.dup?`<div class="s">parece já lançado</div>`:""}</td>
+     <td><input class="search" style="min-width:180px" data-ltd="${l.i}" value="${esc(l.desc)}" placeholder="Função, PIX…"></td>
+     <td><input class="search" type="date" data-ltv="${l.i}" value="${l.venc}"></td>
+     <td class="r"><input class="search num" style="width:110px;text-align:right" inputmode="decimal" data-lta="${l.i}" value="${brlIn(l.valor)}"></td></tr>`).join("")}</tbody></table></div>
+   <span class="hint">Total marcado: <b id="ltTot" class="num"></b></span></div>`,
+   {submit:op.pago?"Lançar como pagos":"Lançar em A pagar",onOpen:f=>{
+      const tot=()=>{let t=0,n=0;for(const c of f.querySelectorAll("[data-lt]"))if(c.checked){const v=parseBRL(f.querySelector(`[data-lta="${c.dataset.lt}"]`).value);if(!isNaN(v))t+=v;n++}f.querySelector("#ltTot").textContent=`${n} pessoa(s) · ${brl(t)}`};
+      f.querySelector("#ltAll").addEventListener("change",e=>{for(const c of f.querySelectorAll("[data-lt]"))c.checked=e.target.checked;tot()});
+      f.addEventListener("change",tot);f.addEventListener("input",e=>{if(e.target.matches("[data-lta]"))tot()});tot();
+      dlg.style.maxWidth="min(1000px,96vw)";dlg.style.width="min(1000px,96vw)"},
+    onSubmit:async(fd,f)=>{
+      const sel=[...f.querySelectorAll("[data-lt]")].filter(c=>c.checked).map(c=>{const i=c.dataset.lt;
+        return {nome:f.querySelector(`[data-ltn="${i}"]`).value.trim(),desc:f.querySelector(`[data-ltd="${i}"]`).value.trim(),venc:f.querySelector(`[data-ltv="${i}"]`).value,valor:parseBRL(f.querySelector(`[data-lta="${i}"]`).value)}});
+      need(sel.length,"Marque pelo menos uma pessoa.");
+      for(const s of sel){need(s.nome,"Há uma linha sem nome.");need(!isNaN(s.valor)&&s.valor>0,`Valor inválido para ${s.nome}.`);need(s.venc,`Informe a data de ${s.nome}.`)}
+      const agora=new Date().toISOString();
+      await write(async()=>{for(const s of sel){
+        const fo=S.fornecedores.find(k=>normF(k.nome)===normF(s.nome));
+        const o={fornecedor:s.nome,fornecedorId:fo?fo.id:"",empresaId:op.empresaId,descricao:s.desc||(ev?ev.evento:""),categoria:op.categoria,valor:s.valor,vencimento:s.venc,forma:op.forma,contaId:op.contaId,prioridade:2,contratoId:op.contratoId,origem:"lote",criadoEm:agora,criadoPor:S.me||null,
+          status:op.pago?"pago":"aberto",...(op.pago?{pagoEm:s.venc,valorPago:s.valor,pagoPor:S.me||null}:{})};
+        await comRetry(()=>db.collection("pagar").doc().set(o))}});const n=sel.length;
+      dlg.style.maxWidth="";dlg.style.width="";
+      toast(`${n} lançamento(s) criado(s) · ${brl(sel.reduce((t,s)=>t+s.valor,0))}`);
+    }});
+}
 function vPagar(){
   const list=filterList(S.pagar,UI.pp==="9"?"todos":UI.pf,UI.pq,x=>[x.fornecedor,x.descricao,x.categoria,x.forma].join(" ")).filter(x=>(!UI.pb||x.contaId===UI.pb)&&(!UI.pp||String(x.prioridade||"")===UI.pp));
   if(UI.ps==="prio")list.sort((a,b)=>((a.status==="pago")-(b.status==="pago"))||((a.prioridade||9)-(b.prioridade||9))||(a.vencimento||"").localeCompare(b.vencimento||""));
@@ -969,7 +1041,7 @@ function vPagar(){
     <td>${pill(st)}${st==="pago"?`<div class="s">${fmtD(x.pagoEm)}${x.comprovanteId?" · "+comprovanteLink(x):""}</div>`:""}${metaPg(x)}</td>
     <td class="r"><div class="row-act">${x.linhaDigitavel&&x.status!=="pago"?`<button class="btn sm ghost" data-a="copiar-linha" data-id="${x.id}" title="${esc(x.linhaDigitavel)}">Copiar código</button>`:""}${W()&&x.status!=="pago"&&!x.spam?`<button class="btn sm primary" data-a="pagar-desp" data-id="${x.id}">Marcar pago</button>`:""}${W()&&x.status!=="pago"&&!x.spam&&x.status!=="cancelado"?`<button class="btn sm ghost" data-a="spam" data-id="${x.id}" title="Boleto não reconhecido">🚫 Spam</button>`:""}${W()&&x.spam?`<button class="btn sm ghost" data-a="nao-spam" data-id="${x.id}">Não é spam</button>`:""}${W()&&x.status==="pago"?`<button class="btn sm ghost" data-a="desfazer-desp" data-id="${x.id}">Desfazer</button>`:""}${W()?`<button class="btn sm ghost" data-a="edit-desp" data-id="${x.id}">Editar</button>`:""}</div></td></tr>`}).join("")}</tbody></table></div>`
    :`<div class="empty"><strong>${S.pagar.length?"Nada neste filtro":"Nenhuma conta a pagar cadastrada"}</strong>${S.pagar.length?"":"Registre fornecedores, folha, aluguel e impostos para ver o saldo previsto no painel."}${W()&&!S.pagar.length?`<button class="btn primary" data-a="nova-despesa">+ Cadastrar conta a pagar</button>`:""}</div>`;
-  return `<div class="head"><div><h1>A pagar</h1><p class="sub">Fornecedores, equipe, contas fixas e impostos.</p></div><div class="actions"><button class="btn" data-a="csv" data-v="pagar">Exportar planilha</button>${W()?`<button class="btn" data-a="dda">Importar DDA</button><button class="btn primary" data-a="nova-despesa">+ Conta a pagar</button>`:""}</div></div>
+  return `<div class="head"><div><h1>A pagar</h1><p class="sub">Fornecedores, equipe, contas fixas e impostos.</p></div><div class="actions"><button class="btn" data-a="csv" data-v="pagar">Exportar planilha</button>${W()?`<button class="btn" data-a="dda">Importar DDA</button><button class="btn" data-a="lote-equipe">Equipe em lote</button><button class="btn primary" data-a="nova-despesa">+ Conta a pagar</button>`:""}</div></div>
   <div class="toolbar"><div class="chips">${chipsFor("pf",UI.pf,S.pagar)}</div><div class="chips"><select class="search" style="width:auto" id="pp" aria-label="Prioridade"><option value="">Todas as prioridades</option>${[1,2,3,9].map(n=>`<option value="${n}" ${UI.pp===String(n)?"selected":""}>${n===9?"🚫 Spam":n+" · "+PRIO[n]}</option>`).join("")}</select><select class="search" style="width:auto" id="ps" aria-label="Ordenar"><option value="venc" ${UI.ps==="venc"?"selected":""}>Ordenar por vencimento</option><option value="prio" ${UI.ps==="prio"?"selected":""}>Ordenar por prioridade</option></select>${bankFilter("pb")}<input class="search" id="pq" type="search" placeholder="Buscar fornecedor ou categoria" value="${esc(UI.pq)}" data-q="pq"></div></div>
   <section class="panel">${body}${list.length?`<div class="panel-b" style="border-top:1px solid var(--line);display:flex;justify-content:space-between"><span class="muted">${list.length} item(ns)</span><b class="num">${brl(tot)}</b></div>`:""}</section>`;
 }
@@ -2680,6 +2752,7 @@ document.addEventListener("click",ev=>{
     case "cb":UI.cb=v;render();break;
     case "kt":UI.kt=v;UI.kq="";render();break;
     case "dda":formDDA();break;
+    case "lote-equipe":if(!db)return;formLoteEquipe();break;
     case "spam":marcarSpam(byId(S.pagar,id));break;
     case "nao-spam":{const x=byId(S.pagar,id);if(x)act(()=>db.collection("pagar").doc(x.id).set({...strip(x),spam:false,status:"aberto",prioridade:2,...stamp()}),"Voltou para contas em aberto")}break;
     case "desbloq":{const L=spamLista().filter((b,i)=>String(i)!==v);act(()=>db.doc("config/geral").set({...S.config,ddaSpam:L,...stamp()}),"Beneficiário desbloqueado")}break;
