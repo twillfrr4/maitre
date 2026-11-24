@@ -1020,13 +1020,14 @@ function formLoteEquipe(){
 }
 function previaLote(r,op){
   const L=r.itens.map((x,i)=>{const venc=x.venc||op.venc;const fo=!x.pix&&S.fornecedores.find(k=>normF(k.nome)===normF(x.nome));if(fo&&fo.pix)x={...x,pix:fo.pix};
-    const dup=S.pagar.some(p=>p.status!=="cancelado"&&normF(p.fornecedor)===normF(x.nome)&&p.valor===x.valor&&(p.contratoId||"")===op.contratoId&&p.vencimento===venc);
-    return {...x,i,venc,dup}});
+    const ex=S.pagar.find(p=>p.status!=="cancelado"&&normF(p.fornecedor)===normF(x.nome)&&p.valor===x.valor&&(p.contratoId||"")===op.contratoId&&Math.abs((new Date(p.vencimento)-new Date(venc))/864e5)<=10);
+    return {...x,i,venc,dup:!!ex,exId:ex&&!ex.pix&&x.pix?ex.id:""}});
+  const nPix=L.filter(l=>l.exId).length;
   const ev=op.contratoId&&byId(S.contratos,op.contratoId);
-  openDlg(`Conferir lançamentos · ${L.length} pessoa(s)`,`<p class="fld full hint" style="margin:0"><span>${ev?`Evento: <b>${esc(ev.evento)}</b> · `:""}${esc(op.categoria)} · ${op.pago?"entram como <b>pagos</b>":"entram <b>em aberto</b> em A pagar"}${r.ign?` · ${r.ign} linha(s) de título/total ignorada(s)`:""}</span></p>
+  openDlg(`Conferir lançamentos · ${L.length} pessoa(s)`,`<p class="fld full hint" style="margin:0"><span>${ev?`Evento: <b>${esc(ev.evento)}</b> · `:""}${esc(op.categoria)} · ${op.pago?"entram como <b>pagos</b>":"entram <b>em aberto</b> em A pagar"}${r.ign?` · ${r.ign} linha(s) de título/total ignorada(s)`:""}${nPix?` · <b>${nPix} já lançado(s) sem chave PIX</b>: a chave será adicionada a eles`:""}</span></p>
    <div class="fld full"><div class="tbl-wrap" style="max-height:55vh;overflow:auto"><table class="dda"><thead><tr><th><input type="checkbox" id="ltAll" checked aria-label="Marcar todos"></th><th>Nome</th><th>Chave PIX</th><th>Descrição</th><th>Data</th><th class="r">Valor (R$)</th></tr></thead><tbody>
    ${L.map(l=>`<tr class="${l.dup?"muted":""}"><td><input type="checkbox" data-lt="${l.i}" ${l.dup?"":"checked"} aria-label="Lançar ${esc(l.nome)}"></td>
-     <td><input class="search" style="min-width:180px" data-ltn="${l.i}" value="${esc(l.nome)}">${l.dup?`<div class="s">parece já lançado</div>`:""}</td>
+     <td><input class="search" style="min-width:180px" data-ltn="${l.i}" value="${esc(l.nome)}">${l.dup?`<div class="s">parece já lançado${l.exId?" · a chave PIX será adicionada":""}</div>`:""}</td>
      <td><input class="search" style="min-width:150px" data-ltp="${l.i}" value="${esc(l.pix||"")}" placeholder="CPF, celular, e-mail…"></td>
      <td><input class="search" style="min-width:160px" data-ltd="${l.i}" value="${esc(l.desc)}" placeholder="Função, observação…"></td>
      <td><input class="search" type="date" data-ltv="${l.i}" value="${l.venc}"></td>
@@ -1040,6 +1041,9 @@ function previaLote(r,op){
     onSubmit:async(fd,f)=>{
       const sel=[...f.querySelectorAll("[data-lt]")].filter(c=>c.checked).map(c=>{const i=c.dataset.lt;
         return {nome:f.querySelector(`[data-ltn="${i}"]`).value.trim(),desc:f.querySelector(`[data-ltd="${i}"]`).value.trim(),pix:pixNorm(f.querySelector(`[data-ltp="${i}"]`).value),venc:f.querySelector(`[data-ltv="${i}"]`).value,valor:parseBRL(f.querySelector(`[data-lta="${i}"]`).value)}});
+      const comPix=L.filter(l=>l.exId&&!f.querySelector(`[data-lt="${l.i}"]`).checked).map(l=>({id:l.exId,pix:pixNorm(f.querySelector(`[data-ltp="${l.i}"]`).value)})).filter(x=>x.pix);
+      if(!sel.length&&comPix.length){await write(async()=>{for(const c of comPix){const x=byId(S.pagar,c.id);if(x)await comRetry(()=>db.collection("pagar").doc(c.id).set({...strip(x),pix:c.pix,...stamp()}))}});
+        dlg.style.maxWidth="";dlg.style.width="";toast(`Chave PIX adicionada em ${comPix.length} lançamento(s)`);return}
       need(sel.length,"Marque pelo menos uma pessoa.");
       for(const s of sel){need(s.nome,"Há uma linha sem nome.");need(!isNaN(s.valor)&&s.valor>0,`Valor inválido para ${s.nome}.`);need(s.venc,`Informe a data de ${s.nome}.`)}
       const agora=new Date().toISOString();
@@ -1047,9 +1051,10 @@ function previaLote(r,op){
         const fo=S.fornecedores.find(k=>normF(k.nome)===normF(s.nome));
         const o={fornecedor:s.nome,fornecedorId:fo?fo.id:"",pix:s.pix||"",empresaId:op.empresaId,descricao:s.desc||(ev?ev.evento:""),categoria:op.categoria,valor:s.valor,vencimento:s.venc,forma:op.forma,contaId:op.contaId,prioridade:2,contratoId:op.contratoId,origem:"lote",criadoEm:agora,criadoPor:S.me||null,
           status:op.pago?"pago":"aberto",...(op.pago?{pagoEm:s.venc,valorPago:s.valor,pagoPor:S.me||null}:{})};
-        await comRetry(()=>db.collection("pagar").doc().set(o))}});const n=sel.length;
+        await comRetry(()=>db.collection("pagar").doc().set(o))}
+        for(const c of comPix){const x=byId(S.pagar,c.id);if(x)await comRetry(()=>db.collection("pagar").doc(c.id).set({...strip(x),pix:c.pix,...stamp()}))}});const n=sel.length;
       dlg.style.maxWidth="";dlg.style.width="";
-      toast(`${n} lançamento(s) criado(s) · ${brl(sel.reduce((t,s)=>t+s.valor,0))}`);
+      toast(`${n} lançamento(s) criado(s) · ${brl(sel.reduce((t,s)=>t+s.valor,0))}${comPix.length?` · chave PIX adicionada em ${comPix.length}`:""}`);
     }});
 }
 function vPagar(){
