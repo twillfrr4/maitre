@@ -1057,6 +1057,30 @@ function previaLote(r,op){
       toast(`${n} lançamento(s) criado(s) · ${brl(sel.reduce((t,s)=>t+s.valor,0))}${comPix.length?` · chave PIX adicionada em ${comPix.length}`:""}`);
     }});
 }
+function lotesEquipe(){
+  const g={};for(const x of S.pagar)if(x.origem==="lote"&&x.criadoEm)(g[x.criadoEm]=g[x.criadoEm]||[]).push(x);
+  return Object.entries(g).map(([em,xs])=>({em,xs})).sort((a,b)=>b.em.localeCompare(a.em));
+}
+function formLotes(){
+  const L=lotesEquipe();
+  const nomesDe=xs=>new Set(xs.map(x=>normF(x.fornecedor)+"|"+x.valor));
+  const linhas=L.map((l,i)=>{const n=nomesDe(l.xs);const rep=L.some((o,j)=>j!==i&&o.xs.length&&[...nomesDe(o.xs)].filter(k=>n.has(k)).length>=Math.min(n.size,3));
+    const ev=[...new Set(l.xs.map(x=>x.contratoId).filter(Boolean))].map(id=>byId(S.contratos,id)).filter(Boolean).map(c=>c.evento);
+    const vs=[...new Set(l.xs.map(x=>x.vencimento))].sort();const pagos=l.xs.filter(x=>x.status==="pago").length;
+    return `<tr><td class="num">${new Date(l.em).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}</td><td>${esc(l.xs.slice(0,3).map(x=>x.fornecedor.split(" ")[0]).join(", "))}${l.xs.length>3?"…":""}<div class="s">${ev.length?esc(ev.join(", "))+" · ":""}pagar em ${vs.map(fmtD).join(", ")} · ${l.xs.every(x=>x.pix)?"com chave PIX":l.xs.some(x=>x.pix)?"PIX em parte":"sem chave PIX"}${rep?` · <b style="color:var(--bad)">parece repetido</b>`:""}</div></td>
+      <td class="r num">${l.xs.length}</td><td class="r num">${brl(l.xs.reduce((t,x)=>t+(x.valor||0),0))}</td><td class="s">${pagos?pagos+" pago(s)":"em aberto"}</td>
+      <td class="r"><button type="button" class="btn sm ghost" data-del-lote="${i}">Excluir lote</button></td></tr>`}).join("");
+  openDlg("Lotes de equipe lançados",L.length?`<p class="fld full hint" style="margin:0"><span>Cada vez que você usa “Equipe em lote” fica registrado aqui. Se lançou a mesma planilha duas vezes, exclua o lote repetido. Os itens vão para a lixeira e podem ser restaurados.</span></p>
+    <div class="fld full"><div class="tbl-wrap" style="max-height:60vh;overflow:auto"><table><thead><tr><th>Lançado em</th><th>Pessoas</th><th class="r">Qtd.</th><th class="r">Total</th><th>Situação</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div></div>`:`<p class="fld full">Nenhum lote lançado ainda.</p>`,
+   {submit:"Fechar",onOpen:f=>{dlg.style.maxWidth="min(1000px,96vw)";dlg.style.width="min(1000px,96vw)";
+      f.addEventListener("click",async e=>{const b=e.target.closest("[data-del-lote]");if(!b)return;e.preventDefault();const l=L[b.dataset.delLote];
+        const ab=l.xs.filter(x=>x.status!=="pago");const pg=l.xs.length-ab.length;
+        dlg.close();dlg.style.maxWidth="";dlg.style.width="";
+        if(!ab.length){toast("Todos deste lote já estão pagos. Desfaça o pagamento antes, se precisar.");return}
+        if(await confirmBox(`Excluir <b>${ab.length}</b> lançamento(s) em aberto deste lote (${brl(ab.reduce((t,x)=>t+(x.valor||0),0))})?${pg?`<br>${pg} já pago(s) ficam no sistema.`:""}<br><span class="muted">Eles vão para a lixeira e podem ser restaurados em Controle.</span>`))
+          await act(async()=>{for(const x of ab)await comRetry(()=>db.collection("pagar").doc(x.id).delete())},`${ab.length} lançamento(s) excluído(s)`)})},
+    onSubmit:async()=>{dlg.style.maxWidth="";dlg.style.width=""}});
+}
 function vPagar(){
   const list=filterList(S.pagar,UI.pp==="9"?"todos":UI.pf,UI.pq,x=>[x.fornecedor,x.descricao,x.categoria,x.forma].join(" ")).filter(x=>(!UI.pb||x.contaId===UI.pb)&&(!UI.pp||String(x.prioridade||"")===UI.pp));
   if(UI.ps==="prio")list.sort((a,b)=>((a.status==="pago")-(b.status==="pago"))||((a.prioridade||9)-(b.prioridade||9))||(a.vencimento||"").localeCompare(b.vencimento||""));
@@ -1066,7 +1090,7 @@ function vPagar(){
     <td>${pill(st)}${st==="pago"?`<div class="s">${fmtD(x.pagoEm)}${x.comprovanteId?" · "+comprovanteLink(x):""}</div>`:""}${metaPg(x)}</td>
     <td class="r"><div class="row-act">${x.linhaDigitavel&&x.status!=="pago"?`<button class="btn sm ghost" data-a="copiar-linha" data-id="${x.id}" title="${esc(x.linhaDigitavel)}">Copiar código</button>`:""}${x.pix&&x.status!=="pago"&&!x.spam?`<button class="btn sm ghost" data-a="copiar-pix" data-id="${x.id}" title="${esc(x.pix)}">Copiar PIX</button>`:""}${W()&&x.status!=="pago"&&!x.spam?`<button class="btn sm primary" data-a="pagar-desp" data-id="${x.id}">Marcar pago</button>`:""}${W()&&x.status!=="pago"&&!x.spam&&x.status!=="cancelado"?`<button class="btn sm ghost" data-a="spam" data-id="${x.id}" title="Boleto não reconhecido">🚫 Spam</button>`:""}${W()&&x.spam?`<button class="btn sm ghost" data-a="nao-spam" data-id="${x.id}">Não é spam</button>`:""}${W()&&x.status==="pago"?`<button class="btn sm ghost" data-a="desfazer-desp" data-id="${x.id}">Desfazer</button>`:""}${W()?`<button class="btn sm ghost" data-a="edit-desp" data-id="${x.id}">Editar</button>`:""}</div></td></tr>`}).join("")}</tbody></table></div>`
    :`<div class="empty"><strong>${S.pagar.length?"Nada neste filtro":"Nenhuma conta a pagar cadastrada"}</strong>${S.pagar.length?"":"Registre fornecedores, folha, aluguel e impostos para ver o saldo previsto no painel."}${W()&&!S.pagar.length?`<button class="btn primary" data-a="nova-despesa">+ Cadastrar conta a pagar</button>`:""}</div>`;
-  return `<div class="head"><div><h1>A pagar</h1><p class="sub">Fornecedores, equipe, contas fixas e impostos.</p></div><div class="actions"><button class="btn" data-a="csv" data-v="pagar">Exportar planilha</button>${W()?`<button class="btn" data-a="dda">Importar DDA</button><button class="btn" data-a="lote-equipe">Equipe em lote</button><button class="btn primary" data-a="nova-despesa">+ Conta a pagar</button>`:""}</div></div>
+  return `<div class="head"><div><h1>A pagar</h1><p class="sub">Fornecedores, equipe, contas fixas e impostos.</p></div><div class="actions"><button class="btn" data-a="csv" data-v="pagar">Exportar planilha</button>${W()?`<button class="btn" data-a="dda">Importar DDA</button><button class="btn" data-a="lote-equipe">Equipe em lote</button>${lotesEquipe().length?`<button class="btn ghost" data-a="lotes">Lotes lançados</button>`:""}<button class="btn primary" data-a="nova-despesa">+ Conta a pagar</button>`:""}</div></div>
   <div class="toolbar"><div class="chips">${chipsFor("pf",UI.pf,S.pagar)}</div><div class="chips"><select class="search" style="width:auto" id="pp" aria-label="Prioridade"><option value="">Todas as prioridades</option>${[1,2,3,9].map(n=>`<option value="${n}" ${UI.pp===String(n)?"selected":""}>${n===9?"🚫 Spam":n+" · "+PRIO[n]}</option>`).join("")}</select><select class="search" style="width:auto" id="ps" aria-label="Ordenar"><option value="venc" ${UI.ps==="venc"?"selected":""}>Ordenar por vencimento</option><option value="prio" ${UI.ps==="prio"?"selected":""}>Ordenar por prioridade</option></select>${bankFilter("pb")}<input class="search" id="pq" type="search" placeholder="Buscar fornecedor ou categoria" value="${esc(UI.pq)}" data-q="pq"></div></div>
   <section class="panel">${body}${list.length?`<div class="panel-b" style="border-top:1px solid var(--line);display:flex;justify-content:space-between"><span class="muted">${list.length} item(ns)</span><b class="num">${brl(tot)}</b></div>`:""}</section>`;
 }
@@ -2778,6 +2802,7 @@ document.addEventListener("click",ev=>{
     case "kt":UI.kt=v;UI.kq="";render();break;
     case "dda":formDDA();break;
     case "lote-equipe":if(!db)return;formLoteEquipe();break;
+    case "lotes":formLotes();break;
     case "spam":marcarSpam(byId(S.pagar,id));break;
     case "nao-spam":{const x=byId(S.pagar,id);if(x)act(()=>db.collection("pagar").doc(x.id).set({...strip(x),spam:false,status:"aberto",prioridade:2,...stamp()}),"Voltou para contas em aberto")}break;
     case "desbloq":{const L=spamLista().filter((b,i)=>String(i)!==v);act(()=>db.doc("config/geral").set({...S.config,ddaSpam:L,...stamp()}),"Beneficiário desbloqueado")}break;
