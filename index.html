@@ -962,23 +962,33 @@ function previaDDA(L,empDet){
 }
 /* ---------- Equipe / freelancers em lote (colar da planilha) ---------- */
 function lerLote(txt){
-  const ehValor=c=>{const s=c.replace(/R\$|\s/g,"");if(!/^-?[\d.,]+$/.test(s)||!/\d/.test(s))return false;
+  const ehValor=c=>{const s=String(c).replace(/R\$|\s/g,"");if(!/^-?[\d.,]+$/.test(s)||!/\d/.test(s))return false;
     const dig=s.replace(/\D/g,"");if(!/[.,]\d{1,2}$/.test(s)&&dig.length>6)return false;if(/^\d{2}[./]\d{2}([./]\d{2,4})?$/.test(s))return false;const v=parseBRL(s);return !isNaN(v)&&v>0};
+  const soNum=c=>/^[\d.,]+$/.test(String(c).replace(/\s/g,""))&&String(c).replace(/\D/g,"").length<=6;
   const ehData=c=>/^\d{1,2}\/\d{1,2}(\/\d{2,4})?$/.test(c.trim());
   const isoData=c=>{const [d,m,y]=c.trim().split("/");const a=!y?todayISO().slice(0,4):y.length===2?"20"+y:y;return a+"-"+pad(m)+"-"+pad(d)};
+  const rows=String(txt||"").split(/\r?\n/).filter(r=>r.trim()).map(raw=>{
+    let cel=raw.includes("\t")?raw.split("\t"):raw.includes(";")?raw.split(";"):raw.split(/\s{2,}/);cel=cel.map(c=>c.trim());
+    if(cel.filter(Boolean).length===1){const t=cel.find(Boolean);const m=t.match(/^(.*?[A-Za-zÀ-ú].*?)\s+(R\$\s*)?([\d.]+(,\d{1,2})?)$/);if(m)cel=[m[1].replace(/[-–:]+$/,"").trim(),m[3]]}
+    return cel});
+  // cabeçalho: linha com "nome"/"funcionário" e "valor"/"a pagar"/"total"
+  let hi=-1,cN=-1,cV=-1,cD=-1,cMax=999;
+  rows.forEach((r,k)=>{if(hi>=0)return;const n=r.map(c=>norm(c));
+    const iN=n.findIndex(c=>/^(nome|funcionari|colaborador|freela|pessoa)/.test(c));
+    let iV=n.findIndex(c=>/a pagar|^valor|^cache|^taxa a pagar/.test(c));if(iV<0)iV=n.findIndex(c=>/^total/.test(c)&&!/hora|lanc/.test(c));
+    if(iN>=0&&iV>=0){hi=k;cN=iN;cV=iV;cMax=r.reduce((m,c,i)=>c?i:m,0);cD=n.findIndex(c=>/^(data|pagar em|vencimento|pagamento)$/.test(c))}});
   const out=[];let ign=0;
-  for(const raw of String(txt||"").split(/\r?\n/)){
-    if(!raw.trim())continue;
-    let cel=raw.includes("\t")?raw.split("\t"):raw.includes(";")?raw.split(";"):raw.split(/\s{2,}/);
-    cel=cel.map(c=>c.trim()).filter(Boolean);
-    if(cel.length===1){const m=cel[0].match(/^(.*?[A-Za-zÀ-ú].*?)\s+(R\$\s*)?([\d.]+(,\d{1,2})?)$/);if(m)cel=[m[1].replace(/[-–:]+$/,"").trim(),m[3]]}
-    const iv=cel.map(ehValor).lastIndexOf(true);
-    const nomeI=cel.findIndex((c,i)=>i!==iv&&/[A-Za-zÀ-ú]{2}/.test(c)&&!ehData(c));
-    if(iv<0||nomeI<0||/^(sub)?total/i.test(cel[nomeI])){ign++;continue}
-    const di=cel.findIndex(ehData);
-    const resto=cel.filter((c,i)=>i!==iv&&i!==nomeI&&i!==di);
+  rows.forEach((cel,k)=>{
+    if(hi>=0&&k<=hi){ign++;return}
+    let iv,nomeI;
+    if(hi>=0){iv=ehValor(cel[cV]||"")?cV:-1;nomeI=cel[cN]&&/[A-Za-zÀ-ú]{2}/.test(cel[cN])?cN:-1}
+    else{const vs=cel.map((c,i)=>ehValor(c)?i:-1).filter(i=>i>=0);iv=vs.length?vs.reduce((a,b)=>parseBRL(cel[b])>=parseBRL(cel[a])?b:a):-1;
+      nomeI=cel.findIndex((c,i)=>i!==iv&&/[A-Za-zÀ-ú]{2}/.test(c)&&!ehData(c))}
+    if(iv<0||nomeI<0||/^(sub)?total/i.test(cel[nomeI])){ign++;return}
+    const di=cD>=0&&cel[cD]&&ehData(cel[cD])?cD:hi<0?cel.findIndex(ehData):-1;
+    const resto=cel.filter((c,i)=>c&&i<=cMax&&i!==iv&&i!==nomeI&&i!==di&&!soNum(c)&&!/^[SN]$/i.test(c));
     out.push({nome:cel[nomeI],valor:parseBRL(cel[iv]),venc:di>=0?isoData(cel[di]):"",desc:resto.join(" · ")});
-  }
+  });
   return {itens:out,ign};
 }
 function formLoteEquipe(){
