@@ -15,23 +15,45 @@ service cloud.firestore {
     function travadoPg(d){ return d.get('status', '') == 'pago' && d.get('pagoEm', '') != '' && d.get('pagoEm', '') < limite(); }
     function travadoTr(d){ return d.get('data', '') != '' && d.get('data', '') < limite(); }
     function livrePg(){ return (resource == null || !travadoPg(resource.data)) && (request.resource == null || !travadoPg(request.resource.data)); }
+    // Assinatura de contrato: só a gestão marca ou altera um contrato assinado
+    function assinado(d){ return d.get('assinatura', null) is map && d.assinatura.get('status', '') == 'assinado'; }
+    function assinaturaOk(col){
+      return gestao() || col != 'contratos' || request.resource == null
+        || (!assinado(request.resource.data) && (resource == null || !assinado(resource.data)))
+        || (resource != null && request.resource.data.get('assinatura', null) == resource.data.get('assinatura', null));
+    }
+    // Numeração (boletos/orçamentos): o comercial só avança o número, no máximo 100 por vez
+    function contadorOk(){
+      let n = request.resource.data;
+      return request.resource != null && n.keys().hasOnly(['ano', 'n', 'em']) && n.ano is int && n.n is int && n.n >= 0
+        && ((resource == null && n.n <= 100)
+          || (resource != null && n.ano > resource.data.ano && n.n <= 100)
+          || (resource != null && n.ano == resource.data.ano && n.n > resource.data.n && n.n <= resource.data.n + 100));
+    }
     function livreTr(){ return (resource == null || !travadoTr(resource.data)) && (request.resource == null || !travadoTr(request.resource.data)); }
 
     match /pedidos/{e} {
       allow read: if logado() && (e == email() || gestao());
       allow create: if logado() && e == email() && request.resource.data.status == 'pendente'
         && request.resource.data.keys().hasOnly(['nome','telefone','funcao','email','status','em'])
-        && request.resource.data.nome is string && request.resource.data.nome.size() <= 80;
+        && request.resource.data.nome is string && request.resource.data.nome.size() <= 80
+        && request.resource.data.get('telefone', '') is string && request.resource.data.get('telefone', '').size() <= 40
+        && request.resource.data.get('funcao', '') is string && request.resource.data.get('funcao', '').size() <= 80
+        && request.resource.data.get('email', '') is string && request.resource.data.get('email', '').size() <= 120;
       allow write: if gestao();
     }
     match /usuarios/{e} { allow read: if logado() && (e == email() || gestao()); allow write: if gestao(); }
     match /equipe/{id} { allow read: if membro(); allow write: if gestao(); }
     match /config/{id} { allow read: if membro(); allow write: if gestao(); }
-    match /contadores/{id} { allow read, write: if membro(); }
+    match /contadores/{id} { allow read: if membro(); allow write: if gestao() || (comercial() && contadorOk()); }
+    match /agenda/{id} {
+      allow read, delete: if membro();
+      allow create, update: if membro() && request.resource.data.get('titulo', '') is string && request.resource.data.get('titulo', '').size() <= 200;
+    }
 
     match /vendas/{pasta}/{col}/{id} {
       allow read: if gestao() || minhaPasta(pasta);
-      allow write: if (gestao() || minhaPasta(pasta)) && (col != 'receber' || livrePg());
+      allow write: if (gestao() || minhaPasta(pasta)) && (col != 'receber' || livrePg()) && assinaturaOk(col);
     }
     match /pagar/{id} { allow read: if gestao(); allow write: if gestao() && livrePg(); }
     match /transf/{id} { allow read: if gestao(); allow write: if gestao() && livreTr(); }
@@ -42,7 +64,7 @@ service cloud.firestore {
 
     // Demais coleções (bancos, extratos, etc.): só gestão
     match /{col}/{id} {
-      allow read, write: if gestao() && !(col in ['pedidos','usuarios','equipe','config','contadores','vendas','pagar','transf','lixeira','log']);
+      allow read, write: if gestao() && !(col in ['pedidos','usuarios','equipe','config','contadores','agenda','vendas','pagar','transf','lixeira','log']);
     }
   }
 }
