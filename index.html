@@ -1547,8 +1547,10 @@ function formConfig(){
 async function exportCSV(col){
   const rows=col==="receber"
    ?[["Vencimento","Boleto","Cliente","CPF/CNPJ","Descrição","Valor","Situação","Pago em","Valor pago","Banco","Forma"],...S.receber.slice().sort((a,b)=>(a.vencimento||"").localeCompare(b.vencimento||"")).map(x=>{const c=byId(S.clientes,x.clienteId)||{};return [fmtD(x.vencimento),x.numero||"",c.nome||"",c.doc||"",x.descricao||"",brlIn(x.valor),ST_LABEL[status(x)],x.pagoEm?fmtD(x.pagoEm):"",x.valorPago!=null?brlIn(x.valorPago):"",contaNome(x.contaId),x.forma||""]})]
-   :[["Vencimento","Fornecedor","Descrição","Categoria","Prioridade","Valor","Situação","Pago em","Valor pago","Banco","Forma"],...S.pagar.slice().sort((a,b)=>(a.vencimento||"").localeCompare(b.vencimento||"")).map(x=>[fmtD(x.vencimento),x.fornecedor,x.descricao||"",x.categoria||"",x.prioridade?x.prioridade+" - "+PRIO[x.prioridade]:"",brlIn(x.valor),ST_LABEL[status(x)],x.pagoEm?fmtD(x.pagoEm):"",x.valorPago!=null?brlIn(x.valorPago):"",contaNome(x.contaId),x.forma||""])];
-  const csv="﻿"+rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(";")).join("\r\n");
+   :[["Vencimento","Fornecedor","Descrição","Categoria","Prioridade","Valor","Situação","Pago em","Valor pago","Banco","Forma","Chave PIX","Código de barras (linha digitável)","Empresa","Evento"],...S.pagar.slice().sort((a,b)=>(a.vencimento||"").localeCompare(b.vencimento||"")).map(x=>{const ev=x.contratoId&&byId(S.contratos,x.contratoId);const em=EMPS().find(e=>e.id===empDe(x));
+      return [fmtD(x.vencimento),x.fornecedor,x.descricao||"",x.categoria||"",x.prioridade?x.prioridade+" - "+PRIO[x.prioridade]:"",brlIn(x.valor),ST_LABEL[status(x)],x.pagoEm?fmtD(x.pagoEm):"",x.valorPago!=null?brlIn(x.valorPago):"",contaNome(x.contaId),x.forma||"",
+        x.pix?{txt:x.pix}:"",x.linhaDigitavel?{txt:x.linhaDigitavel.replace(/\D/g,"")}:"",em?em.nome:"",ev?ev.evento:""]})];
+  const csv="﻿"+rows.map(r=>r.map(v=>v&&typeof v==="object"?`"=""${String(v.txt).replace(/"/g,"")}"""`:`"${String(v).replace(/"/g,'""')}"`).join(";")).join("\r\n");
   if(!dlCap){toast("Exportação indisponível nesta visualização");return}
   try{await dlCap.save({filename:`${col==="receber"?"contas-a-receber":"contas-a-pagar"}-${todayISO()}.csv`,data:new Blob([csv],{type:"text/csv"})});}
   catch(e){if(e&&e.code!=="declined")toast("Não foi possível exportar ("+(e.code||"erro")+")")}
