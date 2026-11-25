@@ -325,6 +325,15 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
 .ped-row{display:grid;gap:8px;padding:10px 0;border-bottom:1px solid var(--line)}
 .ped-row .ped-op{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .ped-row select{max-width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:inherit;font:inherit;font-size:13px}
+.ag-g{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.ag-h{font-size:11px;color:var(--muted);text-align:center;padding:4px 0;text-transform:uppercase;letter-spacing:.04em}
+.ag-c{min-height:86px;border:1px solid var(--line);border-radius:8px;padding:4px;display:flex;flex-direction:column;gap:2px;background:var(--surface);min-width:0}
+.ag-c.ag-v{border:0;background:none}.ag-c.ag-hoje{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.ag-n{border:0;background:none;font:inherit;font-size:12px;color:var(--muted);text-align:left;cursor:pointer;padding:0 2px}
+.ag-n:hover{color:var(--ink)}
+.ag-e{border:0;border-radius:5px;background:var(--accent-soft);color:var(--ink);font:inherit;font-size:11px;text-align:left;padding:2px 4px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ag-dia{font-size:13px;margin:18px 0 6px;color:var(--muted);font-weight:600}.ag-dia-hoje{color:var(--accent)}
+@media (max-width:640px){.ag-c{min-height:56px}.ag-e{font-size:0;padding:3px}.ag-e::first-letter{font-size:12px}}
 </style>
 </head>
 <body>
@@ -364,7 +373,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
 "use strict";
 /* ---------- estado ---------- */
 const COLS=["clientes","contratos","receber","pagar","extrato","contas","transf","orcamentos","equipe"];
-const S={clientes:[],contratos:[],receber:[],pagar:[],extrato:[],contas:[],transf:[],orcamentos:[],equipe:[],vinculos:[],usuarios:[],pedidos:[],lixeira:[],log:[],fornecedores:[],perfil:null,donos:[],donosOk:new Set(),cont:{},role:"",avisoLimite:false,sel:new Set(),config:{},loaded:{},me:null,names:{},canWrite:true,dbState:"connecting",dbError:""};
+const S={agenda:[],clientes:[],contratos:[],receber:[],pagar:[],extrato:[],contas:[],transf:[],orcamentos:[],equipe:[],vinculos:[],usuarios:[],pedidos:[],lixeira:[],log:[],fornecedores:[],perfil:null,donos:[],donosOk:new Set(),cont:{},role:"",avisoLimite:false,sel:new Set(),config:{},loaded:{},me:null,names:{},canWrite:true,dbState:"connecting",dbError:""};
 const UI={rf:"abertos",rq:"",pf:"abertos",pq:"",cf:"proximos",cq:"",kq:"",xf:"pendentes",xt:"todas",xm:"",xq:"",xlim:150,xb:"",rb:"",pb:"",pp:"",ps:"venc",of:"abertos",oq:"",or:"",ov:"lista",op:"3m",cr:"",rp:"ano",rs:"data",rc:false,rv:"eventos",dm:"realizado",dy:0};
 let db=null,userCap=null,assetsCap=null,dlCap=null;
 
@@ -376,6 +385,7 @@ function ehSpam(nome,cnpj){const n=normF(nome);return spamLista().some(b=>(b.cnp
 const CATS=["Alimentos","Bebidas","Equipe / freelancers","Folha e encargos","Aluguel e contas","Impostos","Marketing","Manutenção","Equipamentos","Devoluções","Tarifas, juros e multas","Empréstimos e antecipações","Outros"];
 const NAV=[
  ["painel","Painel",'<path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 3v6h8V3z"/>'],
+ ["agenda","Agenda",'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M8 14h3M8 17h6"/>'],
  ["orcamentos","Orçamentos",'<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6M9 16h3"/>'],
  ["contratos","Contratos",'<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/>'],
  ["receber","A receber",'<path d="M12 4v12M6 10l6 6 6-6M4 20h16"/>'],
@@ -491,7 +501,7 @@ function render(){
   let r=route();
   if(!ADMIN()&&["bancos","conciliacao","pagar","resultados","controle"].includes(r))r="painel";
   const m=document.getElementById("main");
-  const views={painel:ADMIN()?vPainel:vPainelComercial,orcamentos:vOrcamentos,contratos:vContratos,receber:vReceber,pagar:vPagar,conciliacao:vConciliacao,bancos:vBancos,resultados:vResultados,clientes:vClientes,controle:vControle};
+  const views={painel:ADMIN()?vPainel:vPainelComercial,agenda:vAgenda,orcamentos:vOrcamentos,contratos:vContratos,receber:vReceber,pagar:vPagar,conciliacao:vConciliacao,bancos:vBancos,resultados:vResultados,clientes:vClientes,controle:vControle};
   comFiltroEmpresa(()=>{
     m.innerHTML=banner()+(ADMIN()&&EMP_ROTAS.includes(r)?`<div class="emp-bar">${seletorEmpresa()}${UI.emp?`<span class="s muted">Mostrando só: <b>${esc(empNome(UI.emp))}</b></span>`:""}</div>`:"")+views[r]();
     if(r==="painel")drawChart();
@@ -549,6 +559,13 @@ function montarAlertas(D,hoje){
   const G=[];const V={};const sec=(arr,o)=>{if(o.itens.length)arr.push(o)};
   const R=(D.receber||[]).filter(aberto),P=(D.pagar||[]).filter(aberto);
   const dow=new Date(hoje+"T12:00:00").getDay();const dia=Number(hoje.slice(8,10));
+  // 0. agenda de hoje e amanhã (compartilhada)
+  const amanha=addD(hoje,1);
+  const agL=(D.agenda||[]).filter(a=>a.status!=="cancelado"&&a.status!=="realizado"&&(a.data===hoje||a.data===amanha)).sort((a,b)=>(a.data+(a.inicio||"")).localeCompare(b.data+(b.inicio||"")));
+  const agSec=()=>({id:"agenda",icone:"📅",titulo:"Agenda",nivel:agL.some(a=>a.data===hoje)?"media":"info",rota:"agenda",
+    resumo:[agL.filter(a=>a.data===hoje).length&&`${agL.filter(a=>a.data===hoje).length} compromisso(s) hoje`,agL.filter(a=>a.data===amanha).length&&`${agL.filter(a=>a.data===amanha).length} amanhã`].filter(Boolean).join(" · "),
+    itens:agL.map(a=>({t:`${a.data===hoje?"Hoje":"Amanhã"}${a.inicio?" "+a.inicio:""} · ${a.titulo||""}`,s:[a.local,resp(a.responsavelId),a.status==="confirmado"?"confirmado":a.data===amanha?"confirmar com o cliente":""].filter(Boolean).join(" · ")}))});
+  sec(G,agSec());
 
   // 1. recebimentos
   const rHoje=R.filter(x=>x.vencimento===hoje),rAtr=R.filter(x=>x.vencimento&&x.vencimento<hoje).sort((a,b)=>a.vencimento.localeCompare(b.vencimento));
@@ -612,6 +629,7 @@ function montarAlertas(D,hoje){
   // ---------- por vendedor ----------
   const donoDe=x=>x.responsavelId||(String(x._o||"").startsWith("eq-")?String(x._o).slice(3):"");
   for(const e of D.equipe||[]){if(e.ativo===false)continue;const L=[];
+    sec(L,agSec());
     const orc=(D.orcamentos||[]).filter(o=>donoDe(o)===e.id&&["aberto","enviado","negociacao"].includes(o.status));
     const ret=orc.filter(o=>o.proximoContato&&o.proximoContato<=hoje);
     sec(L,{id:"retornos",icone:"📞",titulo:"Retornos de orçamento para hoje",nivel:"alta",rota:"orcamentos",resumo:`${ret.length} cliente(s) para contatar`,
@@ -633,7 +651,7 @@ function montarAlertas(D,hoje){
   return {gestao:G,vendedores:V};
 }
 
-function dadosAlertas(){return {receber:S.receber,pagar:S.pagar,contratos:S.contratos,orcamentos:S.orcamentos,clientes:S.clientes,equipe:S.equipe,contas:S.contas,transf:S.transf,extrato:S.extrato,pedidos:S.pedidos,log:S.log,usuarios:S.usuarios,config:S.config}}
+function dadosAlertas(){return {agenda:S.agenda,receber:S.receber,pagar:S.pagar,contratos:S.contratos,orcamentos:S.orcamentos,clientes:S.clientes,equipe:S.equipe,contas:S.contas,transf:S.transf,extrato:S.extrato,pedidos:S.pedidos,log:S.log,usuarios:S.usuarios,config:S.config}}
 function quadroAvisos(){
   const A=montarAlertas(dadosAlertas(),todayISO());
   const L=ADMIN()?A.gestao:(A.vendedores[meuEquipeId()]||[]);
@@ -783,7 +801,7 @@ function vContratos(){
     <td class="num">${fmtD(c.dataEvento)}</td><td class="r"><div class="num">${brl(c.valorTotal)}</div>${c.aditivos&&c.aditivos.length?`<div class="s">${c.aditivos.length} aditivo(s)</div>`:""}<div class="s num">recebido ${brl(pago)}</div></td>
     <td>${e?pill(status(e))+`<div class="s num">${brl(e.valor)} · ${fmtD(e.vencimento)}</div>`:"—"}</td>
     <td>${qq?pill(status(qq))+`<div class="s num">${brl(qq.valor)} · ${fmtD(qq.vencimento)}</div>`:"—"}</td>
-    <td class="r"><div class="row-act">${ADMIN()?`<button class="btn sm ghost" data-a="res-det" data-id="${c.id}">Resultado</button>`:""}${docsBtn("contratos",c)}${W()?`<button class="btn sm" data-a="edit-contrato" data-id="${c.id}">Editar</button>`:""}</div></td></tr>`}).join("")}</tbody></table></div>`
+    <td class="r"><div class="row-act">${ADMIN()?`<button class="btn sm ghost" data-a="res-det" data-id="${c.id}">Resultado</button>`:""}${docsBtn("contratos",c)}${W()&&c.status!=="cancelado"?`<button class="btn sm ghost" data-a="agendar-ctr" data-id="${c.id}">Agendar</button>`:""}${W()?`<button class="btn sm" data-a="edit-contrato" data-id="${c.id}">Editar</button>`:""}</div></td></tr>`}).join("")}</tbody></table></div>`
    :`<div class="empty"><strong>${S.contratos.length?"Nenhum contrato neste filtro":"Nenhum contrato cadastrado"}</strong>${S.contratos.length?"":"Ao salvar um contrato, o sistema cria sozinho a parcela de entrada e a de quitação (30 dias antes do evento), já com número de boleto."}${W()&&!S.contratos.length?`<button class="btn primary" data-a="novo-contrato">+ Cadastrar o primeiro contrato</button>`:""}</div>`;
   return `<div class="head"><div><h1>Contratos</h1><p class="sub">Eventos fechados pelo comercial, com entrada e quitação de cada um.</p></div><div class="actions">${W()?`<button class="btn primary" data-a="novo-contrato">+ Novo contrato</button>`:""}</div></div>
   <div class="toolbar"><div class="chips">${chips}</div><div class="chips">${respFilter("cr")}<input class="search" id="cq" type="search" placeholder="Buscar evento ou cliente" value="${esc(UI.cq)}" data-q="cq"></div></div>
@@ -958,6 +976,102 @@ function previaDDA(L,empDet){
         }});
       dlg.style.maxWidth="";dlg.style.width="";
       toast(`${sel.length} boleto(s) lançado(s) em A pagar${nf?` · ${nf} fornecedor(es) novo(s) cadastrado(s)`:""}`);
+    }});
+}
+/* ---------- Agenda (degustações, reuniões, visitas) — compartilhada com toda a equipe ---------- */
+const AG_TIPOS=[["degustacao","Degustação","🍽️"],["reuniao","Reunião com cliente","🤝"],["visita","Visita ao espaço","🏛️"],["tecnica","Visita técnica","📐"],["cardapio","Prova / ajuste de cardápio","👨‍🍳"],["assinatura","Assinatura de contrato","✍️"],["interna","Reunião interna","👥"],["outro","Outro","📌"]];
+const AG_ST={marcado:"Marcado",confirmado:"Confirmado",realizado:"Realizado",cancelado:"Cancelado"};
+const agTipo=k=>AG_TIPOS.find(t=>t[0]===k)||AG_TIPOS[AG_TIPOS.length-1];
+const AG=()=>(S.agenda||[]);
+const DSEM=["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+function agDiaLabel(iso){const d=new Date(iso+"T12:00:00");const t=todayISO();const rel=iso===t?"Hoje":iso===addDays(t,1)?"Amanhã":iso===addDays(t,-1)?"Ontem":"";
+  return `${rel?rel+" · ":""}${DSEM[d.getDay()]}, ${fmtD(iso)}`}
+function agFimPadrao(tipo,ini){if(!ini)return "";const [h,m]=ini.split(":").map(Number);const dur=tipo==="degustacao"?120:tipo==="interna"?60:60;const t=h*60+m+dur;return pad(Math.floor(t/60)%24)+":"+pad(t%60)}
+function gcalUrl(a){
+  const d=(a.data||"").replace(/-/g,"");const hi=(a.inicio||"").replace(":","");const hf=(a.fim||agFimPadrao(a.tipo,a.inicio)||"").replace(":","");
+  const dates=hi?`${d}T${hi}00/${d}T${hf||hi}00`:`${d}/${(addDays(a.data,1)||"").replace(/-/g,"")}`;
+  const det=[agTipo(a.tipo)[1],a.contatoNome&&"Contato: "+a.contatoNome,a.telefone&&"Telefone: "+a.telefone,a.pessoas&&"Pessoas: "+a.pessoas,a.responsavelId&&"Responsável: "+respNome(a.responsavelId),a.obs].filter(Boolean).join("\n");
+  return "https://calendar.google.com/calendar/render?action=TEMPLATE&text="+encodeURIComponent(a.titulo||agTipo(a.tipo)[1])+"&dates="+dates+"&ctz=America/Sao_Paulo&details="+encodeURIComponent(det)+(a.local?"&location="+encodeURIComponent(a.local):"");
+}
+function agWpp(a){const tel=dgt(a.telefone||"");if(tel.length<10)return "";const n=tel.length<=11?"55"+tel:tel;const nome=(a.contatoNome||"").split(" ")[0];
+  const msg=`Olá${nome?", "+nome:""}! Aqui é da Bosco. Passando para confirmar ${a.tipo==="degustacao"?"a sua degustação":"o nosso encontro"} ${a.data===todayISO()?"hoje":a.data===addDays(todayISO(),1)?"amanhã":"no dia "+fmtD(a.data)}${a.inicio?" às "+a.inicio.replace(":00","h").replace(":","h"):""}${a.local?", em "+a.local:""}. Podemos confirmar?`;
+  return "https://wa.me/"+n+"?text="+encodeURIComponent(msg)}
+function agLinha(a){const tp=agTipo(a.tipo);const st=a.status||"marcado";const wpp=a.status!=="cancelado"&&a.status!=="realizado"&&a.data>=todayISO()?agWpp(a):"";
+  return `<tr class="${st==="cancelado"?"muted":""}"><td class="num" style="white-space:nowrap">${a.inicio?esc(a.inicio)+(a.fim?"–"+esc(a.fim):""):"Dia todo"}</td>
+   <td><div class="t">${tp[2]} ${esc(a.titulo||tp[1])} ${st!=="marcado"?`<span class="pill ${st==="confirmado"||st==="realizado"?"p-pago":"p-cancelado"}">${AG_ST[st]}</span>`:""}</div>
+   <div class="s">${[tp[1],a.contatoNome&&esc(a.contatoNome)+(a.telefone?" · "+esc(a.telefone):""),a.pessoas&&a.pessoas+" pessoa(s)",a.local&&esc(a.local)].filter(Boolean).join(" · ")}</div>${a.obs?`<div class="s muted">${esc(a.obs)}</div>`:""}</td>
+   <td class="s">${esc(respNome(a.responsavelId)||"")}</td>
+   <td class="r"><div class="row-act">${wpp?`<a class="btn sm ghost" href="${wpp}" target="_blank" rel="noopener">Confirmar no WhatsApp</a>`:""}<a class="btn sm ghost" href="${gcalUrl(a)}" target="_blank" rel="noopener" title="Abre o compromisso já preenchido na sua agenda Google">Agenda Google</a>${W()?`<button class="btn sm" data-a="edit-agenda" data-id="${a.id}">Editar</button>`:""}</div></td></tr>`}
+function agMes(){
+  const base=UI.agm||todayISO().slice(0,7);const [y,m]=base.split("-").map(Number);const ini=new Date(y,m-1,1);const off=ini.getDay();const nd=new Date(y,m,0).getDate();
+  const porDia={};for(const a of AG())if(a.status!=="cancelado"&&(a.data||"").startsWith(base))(porDia[a.data]=porDia[a.data]||[]).push(a);
+  const t=todayISO();let cells="";for(let i=0;i<off;i++)cells+=`<div class="ag-c ag-v"></div>`;
+  for(let d=1;d<=nd;d++){const iso=base+"-"+pad(d);const L=(porDia[iso]||[]).sort((a,b)=>(a.inicio||"").localeCompare(b.inicio||""));
+    cells+=`<div class="ag-c${iso===t?" ag-hoje":""}"><button class="ag-n" data-a="nova-agenda" data-v="${iso}" title="Novo compromisso em ${fmtD(iso)}">${d}</button>${L.slice(0,4).map(a=>`<button class="ag-e" data-a="edit-agenda" data-id="${a.id}" title="${esc((a.inicio||"")+" "+(a.titulo||""))}">${agTipo(a.tipo)[2]} ${esc(a.inicio||"")} ${esc(a.titulo||agTipo(a.tipo)[1])}</button>`).join("")}${L.length>4?`<span class="s">+${L.length-4}</span>`:""}</div>`}
+  const nome=ini.toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
+  const mv=k=>{const d=new Date(y,m-1+k,1);return d.getFullYear()+"-"+pad(d.getMonth()+1)};
+  return `<div class="panel" style="padding:12px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><button class="btn sm ghost" data-a="ag-mes" data-v="${mv(-1)}">‹ Anterior</button><b>${nome.charAt(0).toUpperCase()+nome.slice(1)}</b><button class="btn sm ghost" data-a="ag-mes" data-v="${mv(1)}">Próximo ›</button></div>
+   <div class="ag-g">${DSEM.map(d=>`<div class="ag-h">${d}</div>`).join("")}${cells}</div></div>`}
+function vAgenda(){
+  const t=todayISO(),q=norm(UI.aq||"");const f=UI.af||"proximos";
+  let L=AG().slice();
+  if(f==="hoje")L=L.filter(a=>a.data===t);
+  if(f==="proximos")L=L.filter(a=>a.data>=t&&a.status!=="cancelado");
+  if(f==="semana")L=L.filter(a=>a.data>=t&&a.data<=addDays(t,6));
+  if(f==="passados")L=L.filter(a=>a.data<t);
+  if(UI.at)L=L.filter(a=>a.tipo===UI.at);
+  if(q)L=L.filter(a=>norm([a.titulo,a.contatoNome,a.local,a.obs,respNome(a.responsavelId)].join(" ")).includes(q));
+  L.sort((a,b)=>(f==="passados"?-1:1)*((a.data+(a.inicio||"")).localeCompare(b.data+(b.inicio||""))));
+  const nHoje=AG().filter(a=>a.data===t&&a.status!=="cancelado").length;
+  const chips=[["proximos","Próximos"],["hoje",`Hoje${nHoje?` (${nHoje})`:""}`],["semana","Próximos 7 dias"],["mes","Mês"],["passados","Passados"],["todos","Todos"]].map(([k,l])=>`<button class="chip" data-a="ag-f" data-v="${k}" aria-pressed="${f===k}">${l}</button>`).join("");
+  const tipos=`<select class="search" id="agTipo" aria-label="Tipo" style="width:auto"><option value="">Todos os tipos</option>${AG_TIPOS.map(([k,l])=>`<option value="${k}" ${UI.at===k?"selected":""}>${l}</option>`).join("")}</select>`;
+  let body;
+  if(f==="mes")body=agMes();
+  else if(!L.length)body=`<div class="empty"><strong>${AG().length?"Nenhum compromisso neste filtro":"Agenda vazia"}</strong>Marque degustações, reuniões e visitas aqui. Toda a equipe vê a mesma agenda, e cada compromisso pode ir para a agenda Google com um clique.${W()?`<button class="btn primary" data-a="nova-agenda" style="margin-top:10px">+ Novo compromisso</button>`:""}</div>`;
+  else{const g={};for(const a of L)(g[a.data]=g[a.data]||[]).push(a);
+    body=Object.keys(g).sort((a,b)=>f==="passados"?b.localeCompare(a):a.localeCompare(b)).map(d=>`<h3 class="ag-dia${d===t?" ag-dia-hoje":""}">${agDiaLabel(d)}</h3><div class="tbl-wrap"><table><tbody>${g[d].map(agLinha).join("")}</tbody></table></div>`).join("")}
+  return `<div class="head"><div><h1>Agenda</h1><p class="sub">Degustações, reuniões e visitas. Compartilhada com toda a equipe.</p></div><div class="actions">${W()?`<button class="btn primary" data-a="nova-agenda">+ Novo compromisso</button>`:""}</div></div>
+  <div class="toolbar"><div class="chips">${chips}</div><div class="chips">${tipos}<input class="search" type="search" placeholder="Buscar cliente, local, responsável" value="${esc(UI.aq||"")}" data-q="aq" id="aq"></div></div>${body}`;
+}
+function formAgenda(a={},pre={}){
+  const novo=!a.id;a={status:"marcado",local:"Villa Bosco",...pre,...a};
+  const refs=[["","— sem vínculo —"],...S.orcamentos.filter(o=>["aberto","enviado","negociacao"].includes(o.status)).map(o=>["o:"+o.id,`Orçamento ${o.numero||""} · ${o.contatoNome||clienteNome(o.clienteId)||""}${o.evento?" · "+o.evento:""}`]),
+    ...S.contratos.filter(c=>c.status!=="cancelado"&&c.dataEvento>=addDays(todayISO(),-7)).map(c=>["c:"+c.id,`Contrato · ${c.evento} · ${clienteNome(c.clienteId)}`])];
+  const refAtual=a.orcamentoId?"o:"+a.orcamentoId:a.contratoId?"c:"+a.contratoId:"";
+  if(refAtual&&!refs.some(r=>r[0]===refAtual))refs.push([refAtual,a.refLabel||"Vínculo atual"]);
+  openDlg(novo?"Novo compromisso":"Editar compromisso",
+   SEL("tipo","Tipo",AG_TIPOS.map(([k,l])=>[k,l]),a.tipo||"degustacao")+SEL("status","Situação",Object.entries(AG_ST),a.status)+
+   SEL("ref","Ligado a (opcional)",refs,refAtual,{full:true})+
+   F("titulo","Título",a.titulo,{full:true,req:true,attrs:'placeholder="Ex.: Degustação · Ana e Pedro"'})+
+   F("data","Data",a.data||todayISO(),{type:"date",req:true})+F("inicio","Início",a.inicio||"",{type:"time"})+F("fim","Fim",a.fim||"",{type:"time"})+F("pessoas","Pessoas",a.pessoas||"",{type:"number",attrs:'min="0"',hint:"Quantos vêm (degustação)"})+
+   F("contatoNome","Contato",a.contatoNome||"")+F("telefone","Telefone / WhatsApp",a.telefone||"",{type:"tel"})+
+   F("local","Local",a.local||"")+SEL("responsavelId","Responsável",[["","—"],...S.equipe.filter(e=>e.ativo!==false).map(e=>[e.id,e.nome])],a.responsavelId||(novo?meuEquipeId()||"":""))+
+   TA("obs","Observações",a.obs||""),
+   {registro:novo?null:a,submit:novo?"Salvar compromisso":"Salvar",
+    danger:novo?null:{label:"Excluir",fn:async()=>{dlg.close();if(await confirmBox(`Excluir <b>${esc(a.titulo||"")}</b> de ${fmtD(a.data)}?`))await act(()=>db.collection("agenda").doc(a.id).delete(),"Compromisso excluído")}},
+    onOpen:f=>{const tp=$n(f,"tipo"),ti=$n(f,"titulo"),ini=$n(f,"inicio"),fim=$n(f,"fim"),rf=$n(f,"ref");let auto=novo&&!a.titulo;
+      const sug=()=>{if(!auto)return;const r=rf.value;let nome=$n(f,"contatoNome").value;
+        if(r.startsWith("c:")){const c=byId(S.contratos,r.slice(2));if(c)nome=c.evento}
+        ti.value=agTipo(tp.value)[1]+(nome?" · "+nome:"")};
+      ti.addEventListener("input",()=>{auto=false});
+      tp.addEventListener("change",()=>{sug();if(ini.value&&!fim.dataset.mexeu)fim.value=agFimPadrao(tp.value,ini.value)});
+      ini.addEventListener("change",()=>{if(!fim.dataset.mexeu)fim.value=agFimPadrao(tp.value,ini.value)});fim.addEventListener("input",()=>{fim.dataset.mexeu="1"});
+      rf.addEventListener("change",()=>{const r=rf.value;let nome="",tel="",pes="",resp="";
+        if(r.startsWith("o:")){const o=byId(S.orcamentos,r.slice(2));if(o){const c=byId(S.clientes,o.clienteId)||{};nome=o.contatoNome||c.nome||"";tel=o.contatoTelefone||c.telefone||"";resp=o.responsavelId||""}}
+        if(r.startsWith("c:")){const k=byId(S.contratos,r.slice(2));if(k){const c=byId(S.clientes,k.clienteId)||{};nome=c.nome||"";tel=c.telefone||"";resp=k.responsavelId||""}}
+        if(nome)$n(f,"contatoNome").value=nome;if(tel)$n(f,"telefone").value=tel;if(resp&&!$n(f,"responsavelId").value)$n(f,"responsavelId").value=resp;sug()});
+      $n(f,"contatoNome").addEventListener("input",sug);sug()},
+    onSubmit:async fd=>{
+      const g=k=>String(fd.get(k)||"").trim();const r=g("ref");
+      need(g("data"),"Informe a data.");need(!g("fim")||!g("inicio")||g("fim")>g("inicio")||g("fim")<"06:00","O fim precisa ser depois do início.");
+      const ref=r.startsWith("o:")?byId(S.orcamentos,r.slice(2)):r.startsWith("c:")?byId(S.contratos,r.slice(2)):null;
+      const o={tipo:g("tipo"),status:g("status")||"marcado",titulo:g("titulo"),data:g("data"),inicio:g("inicio"),fim:g("fim"),pessoas:Number(g("pessoas"))||0,
+        contatoNome:g("contatoNome"),telefone:g("telefone"),local:g("local"),responsavelId:g("responsavelId"),obs:g("obs"),
+        orcamentoId:r.startsWith("o:")?r.slice(2):"",contratoId:r.startsWith("c:")?r.slice(2):"",
+        refLabel:ref?(r.startsWith("o:")?`Orçamento ${ref.numero||""}`:`Contrato · ${ref.evento}`):"",
+        criadoEm:a.criadoEm||new Date().toISOString(),criadoPor:a.criadoPor||S.me||null,...stamp()};
+      const ref2=novo?db.collection("agenda").doc():db.collection("agenda").doc(a.id);
+      await write(()=>ref2.set(o));toast(novo?"Compromisso marcado":"Compromisso atualizado");
     }});
 }
 /* ---------- Equipe / freelancers em lote (colar da planilha) ---------- */
@@ -2473,11 +2587,12 @@ function formEquipe(){
 function closeDlgSafe(){const d=document.getElementById("dlg");if(d&&d.open)d.close()}
 
 /* ---------- Controle (gestão) ---------- */
-const COL_N={fornecedores:"Fornecedor",clientes:"Cliente",contratos:"Contrato",receber:"A receber",orcamentos:"Orçamento",pagar:"A pagar",contas:"Banco",transf:"Transferência",equipe:"Equipe",usuarios:"Acesso",config:"Configurações"};
+const COL_N={agenda:"Agenda",fornecedores:"Fornecedor",clientes:"Cliente",contratos:"Contrato",receber:"A receber",orcamentos:"Orçamento",pagar:"A pagar",contas:"Banco",transf:"Transferência",equipe:"Equipe",usuarios:"Acesso",config:"Configurações"};
 const mesNome=m=>m?new Date(m+"-15").toLocaleDateString("pt-BR",{month:"long",year:"numeric"}):"";
 function resumoDe(col,x){
   if(!x)return "";
   switch(col){
+    case "agenda":return `${x.titulo||""} · ${fmtD(x.data)}${x.inicio?" "+x.inicio:""}${x.status&&x.status!=="marcado"?" · "+(AG_ST[x.status]||x.status):""}`;
     case "receber":return `${clienteNome(x.clienteId)||""} · ${x.descricao||""} · ${brl(x.valor)}${x.numero?" · boleto "+x.numero:""}`;
     case "pagar":return `${x.fornecedor||""} · ${x.descricao||""} · ${brl(x.valor)}`;
     case "fornecedores":return `${x.nome||""}${x.doc?" · "+x.doc:""}`;
@@ -2623,7 +2738,7 @@ function vOrcamentos(){
     <td><div class="t">${esc(orcNome(o))} ${respTag(o.responsavelId)}</div><div class="s">${esc([o.tipo,o.evento].filter(Boolean).join(" · "))}${o.convidados?" · "+esc(o.convidados)+" convidados":""}${o.origem?" · via "+esc(o.origem):""}</div></td>
     <td class="num">${fmtD(o.dataEvento)}</td><td class="r num">${brl(o.valor)}</td>
     <td>${orcPill(o.status)}<div class="s">${o.status==="perdido"&&o.motivoPerda?esc(o.motivoPerda):o.status==="fechado"?(k?"contrato gerado":"")+(o.fechadoEm?" · "+fmtD(o.fechadoEm):""):o.proximoContato?`${due?"<b>retornar</b> ":"retorno "}${fmtD(o.proximoContato)}`:""}</div></td>
-    <td class="r"><div class="row-act">${W()&&["aberto","enviado","negociacao"].includes(o.status)?`<button class="btn sm primary" data-a="orc-fechar" data-id="${o.id}">Fechar → contrato</button><button class="btn sm" data-a="orc-perder" data-id="${o.id}">Perdido</button>`:""}${docsBtn("orcamentos",o)}${o.status==="fechado"&&k?`<a class="btn sm ghost" href="#contratos">Ver contrato</a>`:""}${W()?`<button class="btn sm ghost" data-a="orc-edit" data-id="${o.id}">Editar</button>`:""}</div></td></tr>`}).join("")}</tbody></table></div>`
+    <td class="r"><div class="row-act">${W()&&["aberto","enviado","negociacao"].includes(o.status)?`<button class="btn sm ghost" data-a="agendar-orc" data-id="${o.id}">Agendar</button>`:""}${W()&&["aberto","enviado","negociacao"].includes(o.status)?`<button class="btn sm primary" data-a="orc-fechar" data-id="${o.id}">Fechar → contrato</button><button class="btn sm" data-a="orc-perder" data-id="${o.id}">Perdido</button>`:""}${docsBtn("orcamentos",o)}${o.status==="fechado"&&k?`<a class="btn sm ghost" href="#contratos">Ver contrato</a>`:""}${W()?`<button class="btn sm ghost" data-a="orc-edit" data-id="${o.id}">Editar</button>`:""}</div></td></tr>`}).join("")}</tbody></table></div>`
    :`<div class="empty"><strong>${S.orcamentos.length?"Nenhum orçamento neste filtro":"Nenhum orçamento cadastrado"}</strong>${S.orcamentos.length?"":"Registre cada orçamento enviado, com responsável e origem do contato. Quando o cliente fechar, um clique gera o contrato com os mesmos dados."}${W()&&!S.orcamentos.length?`<button class="btn primary" data-a="orc-novo">+ Novo orçamento</button>`:""}</div>`;
   const tot=list.reduce((s,o)=>s+(o.valor||0),0);
   return `<div class="head"><div><h1>Orçamentos</h1><p class="sub">Do primeiro contato ao contrato fechado.</p></div><div class="actions">${W()?`${ADMIN()?`<button class="btn" data-a="equipe">Equipe</button>`:""}<button class="btn primary" data-a="orc-novo">+ Novo orçamento</button>`:""}</div></div>
@@ -2762,6 +2877,12 @@ document.addEventListener("click",ev=>{
   const R=()=>byId(S.receber,id),P=()=>byId(S.pagar,id);
   switch(a){
     case "cf":UI.cf=v;render();break;
+    case "ag-f":UI.af=v;render();break;
+    case "ag-mes":UI.agm=v;render();break;
+    case "nova-agenda":if(!db)return;formAgenda({},v?{data:v}:{});break;
+    case "edit-agenda":{const x=byId(S.agenda,id);if(x)formAgenda(x);break}
+    case "agendar-orc":{const o=byId(S.orcamentos,id);if(o){const c=byId(S.clientes,o.clienteId)||{};formAgenda({},{tipo:"degustacao",orcamentoId:o.id,contatoNome:o.contatoNome||c.nome||"",telefone:o.contatoTelefone||c.telefone||"",responsavelId:o.responsavelId||"",titulo:"Degustação · "+(o.contatoNome||c.nome||o.evento||"")})}break}
+    case "agendar-ctr":{const k=byId(S.contratos,id);if(k){const c=byId(S.clientes,k.clienteId)||{};formAgenda({},{tipo:"reuniao",contratoId:k.id,contatoNome:c.nome||"",telefone:c.telefone||"",responsavelId:k.responsavelId||"",titulo:"Reunião · "+k.evento})}break}
     case "rf":UI.rf=v;render();break;
     case "pf":UI.pf=v;render();break;
     case "novo-contrato":if(!db)return;formContrato();break;
@@ -2845,6 +2966,7 @@ document.addEventListener("change",ev=>{
   const el=ev.target;
   if(el.id==="ofxIn"){const f=el.files&&el.files[0];el.value="";importarOFX(f);return}
   if(el.id==="xm"){UI.xm=el.value;render();return}
+  if(el.id==="agTipo"){UI.at=el.value;render();return}
   if(el.classList&&el.classList.contains("xsel")){el.checked?S.sel.add(el.dataset.u):S.sel.delete(el.dataset.u);render();return}
   if(el.id==="xall"){const boxes=[...document.querySelectorAll(".xsel")];boxes.forEach(x=>el.checked?S.sel.add(x.dataset.u):S.sel.delete(x.dataset.u));render();return}
   if(el.id==="rc"){UI.rc=el.checked;render();return}
@@ -2982,7 +3104,7 @@ auth.onAuthStateChanged(async u=>{
   S.dbState="on";render();
   const onErr=e=>{console.warn("assinatura",e&&e.code)};
   const simples=c=>db.collection(c).onSnapshot(snap=>{S[c]=snap.docs.map(d=>({...d.data(),id:d.id}));S.loaded[c]=true;if(["equipe","donos"].includes(c))atualizarPastas();agendar()},onErr);
-  simples("equipe");
+  simples("equipe");simples("agenda");
   db.doc("config/geral").onSnapshot(s=>{S.config=s.exists?s.data():{};agendar()},onErr);
   for(const t of ["boleto","orcamento"])db.doc("contadores/"+t).onSnapshot(s=>{S.cont[t]=s.exists?s.data():{};agendar()},onErr);
   if(S.role==="admin"){

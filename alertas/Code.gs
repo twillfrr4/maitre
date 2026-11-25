@@ -52,7 +52,7 @@ function carregar_() {
   const log = http_(BASE + ':runQuery', { structuredQuery: { from: [{ collectionId: 'log' }],
     where: { fieldFilter: { field: { fieldPath: 'em' }, op: 'GREATER_THAN_OR_EQUAL', value: { stringValue: ontem } } } } })
     .filter(x => x.document).map(x => doc_(x.document));
-  return { receber: grupo_('receber'), contratos: grupo_('contratos'), orcamentos: grupo_('orcamentos'), clientes: grupo_('clientes'),
+  return { agenda: colecao_('agenda'), receber: grupo_('receber'), contratos: grupo_('contratos'), orcamentos: grupo_('orcamentos'), clientes: grupo_('clientes'),
     pagar: colecao_('pagar'), contas: colecao_('contas'), transf: colecao_('transf'), extrato: colecao_('extrato'),
     equipe: colecao_('equipe'), usuarios: colecao_('usuarios'), pedidos: colecao_('pedidos'), log: log, config: cfg };
 }
@@ -78,6 +78,13 @@ function montarAlertas(D,hoje){
   const G=[];const V={};const sec=(arr,o)=>{if(o.itens.length)arr.push(o)};
   const R=(D.receber||[]).filter(aberto),P=(D.pagar||[]).filter(aberto);
   const dow=new Date(hoje+"T12:00:00").getDay();const dia=Number(hoje.slice(8,10));
+  // 0. agenda de hoje e amanhã (compartilhada)
+  const amanha=addD(hoje,1);
+  const agL=(D.agenda||[]).filter(a=>a.status!=="cancelado"&&a.status!=="realizado"&&(a.data===hoje||a.data===amanha)).sort((a,b)=>(a.data+(a.inicio||"")).localeCompare(b.data+(b.inicio||"")));
+  const agSec=()=>({id:"agenda",icone:"📅",titulo:"Agenda",nivel:agL.some(a=>a.data===hoje)?"media":"info",rota:"agenda",
+    resumo:[agL.filter(a=>a.data===hoje).length&&`${agL.filter(a=>a.data===hoje).length} compromisso(s) hoje`,agL.filter(a=>a.data===amanha).length&&`${agL.filter(a=>a.data===amanha).length} amanhã`].filter(Boolean).join(" · "),
+    itens:agL.map(a=>({t:`${a.data===hoje?"Hoje":"Amanhã"}${a.inicio?" "+a.inicio:""} · ${a.titulo||""}`,s:[a.local,resp(a.responsavelId),a.status==="confirmado"?"confirmado":a.data===amanha?"confirmar com o cliente":""].filter(Boolean).join(" · ")}))});
+  sec(G,agSec());
 
   // 1. recebimentos
   const rHoje=R.filter(x=>x.vencimento===hoje),rAtr=R.filter(x=>x.vencimento&&x.vencimento<hoje).sort((a,b)=>a.vencimento.localeCompare(b.vencimento));
@@ -141,6 +148,7 @@ function montarAlertas(D,hoje){
   // ---------- por vendedor ----------
   const donoDe=x=>x.responsavelId||(String(x._o||"").startsWith("eq-")?String(x._o).slice(3):"");
   for(const e of D.equipe||[]){if(e.ativo===false)continue;const L=[];
+    sec(L,agSec());
     const orc=(D.orcamentos||[]).filter(o=>donoDe(o)===e.id&&["aberto","enviado","negociacao"].includes(o.status));
     const ret=orc.filter(o=>o.proximoContato&&o.proximoContato<=hoje);
     sec(L,{id:"retornos",icone:"📞",titulo:"Retornos de orçamento para hoje",nivel:"alta",rota:"orcamentos",resumo:`${ret.length} cliente(s) para contatar`,
