@@ -969,7 +969,19 @@ function pixNorm(c){c=String(c||"").trim();if(!c)return "";
   if(/^\d{3}\.\d{3}\.\d{3}-\d{2}$/.test(c)||/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(c))return c.replace(/\D/g,"");
   if(/[\s()+]/.test(c)||/^\d{2}\s?9?\d{4}-\d{4}$/.test(c)){let d=c.replace(/\D/g,"");if(d.length>=12&&d.startsWith("55"))d=d.slice(2);if(d.length===10||d.length===11)return "+55"+d}
   return c.replace(/\s/g,"")}
+function lerBlocos(txt){
+  const out=[];let cur=null,ign=0;const fim=()=>{if(cur){if(cur.valor>0)out.push(cur);else ign++}cur=null};
+  for(let ln of String(txt||"").split(/\r?\n/)){ln=ln.replace(/[*_]/g,"").trim();if(!ln){continue}
+    const m=ln.match(/^([^:]{2,30}?)\s*:\s*(.*)$/);const k=m?norm(m[1]):"";
+    if(m&&/pix/.test(k)){if(cur){const nt=m[2].match(/\(([^)]*)\)/);cur.pix=m[2].replace(/\([^)]*\)/,"").trim();if(nt)cur.obs.push(nt[1].trim())}continue}
+    if(m&&/^(valor|total|cache|taxa)/.test(k)){if(cur){const nt=m[2].match(/\(([^)]*)\)/);const v=m[2].replace(/\([^)]*\)/g,"").replace(/R\$/i,"").trim().replace(/:(\d{2})$/,",$1");cur.valor=parseBRL(v);if(nt)cur.obs.push(nt[1].trim())}continue}
+    if(m&&/^(entrada|saida|horario|funcao|cargo|setor|obs)/.test(k)){if(cur)cur.obs.push(ln.replace(/\s*\|\s*/g," · ").replace(/\s+/g," "));continue}
+    if(/[A-Za-zÀ-ú]{2}/.test(ln)){fim();cur={nome:ln.replace(/:\s*$/,"").trim(),valor:0,pix:"",obs:[],venc:""}}
+  }
+  fim();return {itens:out.map(x=>({nome:x.nome,valor:x.valor,venc:"",pix:x.pix,desc:x.obs.join(" · ")})),ign};
+}
 function lerLote(txt){
+  if(/^\s*\**\s*chave\s*pix\s*\**\s*:/im.test(txt)&&/^\s*\**\s*valor\s*\**\s*:/im.test(txt))return lerBlocos(txt);
   const ehValor=c=>{const s=String(c).replace(/R\$|\s/g,"");if(!/^-?[\d.,]+$/.test(s)||!/\d/.test(s))return false;
     const dig=s.replace(/\D/g,"");if(!/[.,]\d{1,2}$/.test(s)&&dig.length>6)return false;if(/^\d{2}[./]\d{2}([./]\d{2,4})?$/.test(s))return false;const v=parseBRL(s);return !isNaN(v)&&v>0};
   const soNum=c=>/^[\d.,]+$/.test(String(c).replace(/\s/g,""))&&String(c).replace(/\D/g,"").length<=6;
