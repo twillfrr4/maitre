@@ -480,7 +480,7 @@ function renderNav(){
   const venc=S.receber.filter(x=>status(x)==="vencido").length;
   const vp=S.pagar.filter(x=>status(x)==="vencido").length;
   let pendTx=0;for(const m of S.extrato){const t=m.t||{};for(const k in t)if(!t[k].st||t[k].st==="pendente")pendTx++}
-  document.getElementById("nav").innerHTML=NAV.filter(n=>ADMIN()||!["bancos","conciliacao","pagar","resultados","controle"].includes(n[0])).map(([k,l,ic])=>{
+  document.getElementById("nav").innerHTML=NAV.filter(n=>ADMIN()||!["bancos","conciliacao","resultados","controle"].includes(n[0])).map(([k,l,ic])=>{
     const c=k==="receber"?venc:k==="pagar"?vp:0;
     const pc=k==="conciliacao"?pendTx:k==="orcamentos"?S.orcamentos.filter(followDue).length:0;
     return `<a href="#${k}" ${r===k?'aria-current="page"':""}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ic}</svg><span class="lb">${l}</span>${c?`<span class="count" title="vencidos">${c}</span>`:""}${pc?`<span class="count neutral" title="pendentes">${pc}</span>`:""}</a>`}).join("");
@@ -499,7 +499,7 @@ function banner(){
 function render(){
   renderNav();
   let r=route();
-  if(!ADMIN()&&["bancos","conciliacao","pagar","resultados","controle"].includes(r))r="painel";
+  if(!ADMIN()&&["bancos","conciliacao","resultados","controle"].includes(r))r="painel";
   const m=document.getElementById("main");
   const views={painel:ADMIN()?vPainel:vPainelComercial,agenda:vAgenda,orcamentos:vOrcamentos,contratos:vContratos,receber:vReceber,pagar:vPagar,conciliacao:vConciliacao,bancos:vBancos,resultados:vResultados,clientes:vClientes,controle:vControle};
   comFiltroEmpresa(()=>{
@@ -1251,10 +1251,10 @@ function vPagar(){
   const body=list.length?`<div class="tbl-wrap"><table><thead><tr><th>Vencimento</th><th>Fornecedor / descrição</th><th>Categoria</th><th class="r">Valor</th><th>Situação</th><th class="r"></th></tr></thead><tbody>${list.map(x=>{const st=status(x);
     return `<tr class="${rowCls(st)}"><td class="num">${fmtD(x.vencimento)}</td><td><div class="t">${esc(x.fornecedor)} ${prioTag(x.prioridade)}</div><div class="s">${esc(x.descricao||"")}</div>${x.contratoId?`<div style="margin-top:3px">${evtTag(x.contratoId)}</div>`:""}</td><td>${esc(x.categoria||"")}</td><td class="r num">${brl(x.valor)}</td>
     <td>${pill(st)}${st==="pago"?`<div class="s">${fmtD(x.pagoEm)}${x.comprovanteId?" · "+comprovanteLink(x):""}</div>`:""}${metaPg(x)}</td>
-    <td class="r"><div class="row-act">${x.linhaDigitavel&&x.status!=="pago"?`<button class="btn sm ghost" data-a="copiar-linha" data-id="${x.id}" title="${esc(x.linhaDigitavel)}">Copiar código</button>`:""}${x.pix&&x.status!=="pago"&&!x.spam?`<button class="btn sm ghost" data-a="copiar-pix" data-id="${x.id}" title="${esc(x.pix)}">Copiar PIX</button>`:""}${W()&&x.status!=="pago"&&!x.spam?`<button class="btn sm primary" data-a="pagar-desp" data-id="${x.id}">Marcar pago</button>`:""}${W()&&x.status!=="pago"&&!x.spam&&x.status!=="cancelado"?`<button class="btn sm ghost" data-a="spam" data-id="${x.id}" title="Boleto não reconhecido">🚫 Spam</button>`:""}${W()&&x.spam?`<button class="btn sm ghost" data-a="nao-spam" data-id="${x.id}">Não é spam</button>`:""}${W()&&x.status==="pago"?`<button class="btn sm ghost" data-a="desfazer-desp" data-id="${x.id}">Desfazer</button>`:""}${W()?`<button class="btn sm ghost" data-a="edit-desp" data-id="${x.id}">Editar</button>`:""}</div></td></tr>`}).join("")}</tbody></table></div>`
+    <td class="r"><div class="row-act">${x.linhaDigitavel&&x.status!=="pago"?`<button class="btn sm ghost" data-a="copiar-linha" data-id="${x.id}" title="${esc(x.linhaDigitavel)}">Copiar código</button>`:""}${x.pix&&x.status!=="pago"&&!x.spam?`<button class="btn sm ghost" data-a="copiar-pix" data-id="${x.id}" title="${esc(x.pix)}">Copiar PIX</button>`:""}${W()&&ADMIN()&&x.status!=="pago"&&!x.spam?`<button class="btn sm primary" data-a="pagar-desp" data-id="${x.id}">Marcar pago</button>`:""}${W()&&ADMIN()&&x.status!=="pago"&&!x.spam&&x.status!=="cancelado"?`<button class="btn sm ghost" data-a="spam" data-id="${x.id}" title="Boleto não reconhecido">🚫 Spam</button>`:""}${W()&&ADMIN()&&x.spam?`<button class="btn sm ghost" data-a="nao-spam" data-id="${x.id}">Não é spam</button>`:""}${W()&&ADMIN()&&x.status==="pago"?`<button class="btn sm ghost" data-a="desfazer-desp" data-id="${x.id}">Desfazer</button>`:""}${W()&&(ADMIN()||x.status==="aberto")?`<button class="btn sm ghost" data-a="edit-desp" data-id="${x.id}">Editar</button>`:""}</div></td></tr>`}).join("")}</tbody></table></div>`
    :`<div class="empty"><strong>${S.pagar.length?"Nada neste filtro":"Nenhuma conta a pagar cadastrada"}</strong>${S.pagar.length?"":"Registre fornecedores, folha, aluguel e impostos para ver o saldo previsto no painel."}${W()&&!S.pagar.length?`<button class="btn primary" data-a="nova-despesa">+ Cadastrar conta a pagar</button>`:""}</div>`;
-  const nDup=W()?gemeos("pagar").length:0;
-  return `${nDup?`<div class="banner">${nDup} possível(is) lançamento(s) duplicado(s) em A pagar. <a href="#" data-a="dups" data-v="pagar">Revisar</a></div>`:""}<div class="head"><div><h1>A pagar</h1><p class="sub">Fornecedores, equipe, contas fixas e impostos.</p></div><div class="actions"><button class="btn" data-a="csv" data-v="pagar">Exportar planilha</button>${W()?`<button class="btn" data-a="dda">Importar DDA</button><button class="btn" data-a="lote-equipe">Equipe em lote</button>${lotesEquipe().length?`<button class="btn ghost" data-a="lotes">Lotes lançados</button>`:""}<button class="btn primary" data-a="nova-despesa">+ Conta a pagar</button>`:""}</div></div>
+  const nDup=W()&&ADMIN()?gemeos("pagar").length:0;
+  return `${nDup?`<div class="banner">${nDup} possível(is) lançamento(s) duplicado(s) em A pagar. <a href="#" data-a="dups" data-v="pagar">Revisar</a></div>`:""}<div class="head"><div><h1>A pagar</h1><p class="sub">${ADMIN()?"Fornecedores, equipe, contas fixas e impostos.":"Contas que você lançou. O pagamento é feito pelo financeiro."}</p></div><div class="actions">${!ADMIN()?(W()?`<button class="btn primary" data-a="nova-despesa">+ Conta a pagar</button>`:""):`<button class="btn" data-a="csv" data-v="pagar">Exportar planilha</button>`}${W()&&ADMIN()?`<button class="btn" data-a="dda">Importar DDA</button><button class="btn" data-a="lote-equipe">Equipe em lote</button>${lotesEquipe().length?`<button class="btn ghost" data-a="lotes">Lotes lançados</button>`:""}<button class="btn primary" data-a="nova-despesa">+ Conta a pagar</button>`:""}</div></div>
   <div class="toolbar"><div class="chips">${chipsFor("pf",UI.pf,S.pagar)}</div><div class="chips"><select class="search" style="width:auto" id="pp" aria-label="Prioridade"><option value="">Todas as prioridades</option>${[1,2,3,9].map(n=>`<option value="${n}" ${UI.pp===String(n)?"selected":""}>${n===9?"🚫 Spam":n+" · "+PRIO[n]}</option>`).join("")}</select><select class="search" style="width:auto" id="ps" aria-label="Ordenar"><option value="venc" ${UI.ps==="venc"?"selected":""}>Ordenar por vencimento</option><option value="prio" ${UI.ps==="prio"?"selected":""}>Ordenar por prioridade</option></select>${bankFilter("pb")}<input class="search" id="pq" type="search" placeholder="Buscar fornecedor ou categoria" value="${esc(UI.pq)}" data-q="pq"></div></div>
   <section class="panel">${body}${list.length?`<div class="panel-b" style="border-top:1px solid var(--line);display:flex;justify-content:space-between"><span class="muted">${list.length} item(ns)</span><b class="num">${brl(tot)}</b></div>`:""}</section>`;
 }
@@ -1564,7 +1564,7 @@ function formDespesa(x={}){
    SEL("categoria","Categoria",CATS.map(c=>[c,c]),x.categoria||"Alimentos")+F("valor","Valor (R$)",x.valor?brlIn(x.valor):"",{req:true,attrs:'inputmode="decimal" placeholder="0,00"'})+
    F("vencimento","Vencimento",x.vencimento||todayISO(),{type:"date",req:true})+
    `<div class="fld full"><span class="lbl-like">Prioridade *</span><div class="seg" role="radiogroup" aria-label="Prioridade">${[1,2,3,9].map(n=>`<label class="seg-o prio-${n}"><input type="radio" name="prioridade" value="${n}" ${Number(x.prioridade||(novo?0:0))===n?"checked":""}><span>${n===9?"🚫 Spam / não reconheço":n+" · "+PRIO[n]}</span></label>`).join("")}</div><span class="hint">Spam: boleto que você não reconhece. Sai dos totais e alertas e fica guardado com essa marca.</span></div>`+
-   FORMA_SEL("forma","Forma de pagamento",x.forma,"pagar")+CONTA_SEL("contaId","Pagar pelo banco",x.contaId)+F("pix","Chave PIX",x.pix||"",{full:true,attrs:'placeholder="CPF, CNPJ, celular, e-mail ou chave aleatória"'})+
+   FORMA_SEL("forma","Forma de pagamento",x.forma,"pagar")+(ADMIN()?CONTA_SEL("contaId","Pagar pelo banco",x.contaId):"")+F("pix","Chave PIX",x.pix||"",{full:true,attrs:'placeholder="CPF, CNPJ, celular, e-mail ou chave aleatória"'})+
    EVT_SEL("contratoId","Evento (custo direto)",x.contratoId,{full:true})+
    (novo?F("repetir","Repetir por quantos meses",1,{type:"number",attrs:'min="1" max="24"',hint:"Para contas fixas (aluguel, contador…)"}):"")+
    (x.status==="pago"?F("pagoEm","Pago em",x.pagoEm,{type:"date"}):""),
@@ -1576,7 +1576,7 @@ function formDespesa(x={}){
           box.hidden=!g.length;box.innerHTML=g.length?`<span>Atenção: já existe ${g.map(p=>`<b>${esc(p.fornecedor)}</b> de ${brl(p.valor)} (${p.status==="pago"?"pago em "+fmtD(p.pagoEm)+(p.contaId?" · "+esc(contaNome(p.contaId)):""):"vence "+fmtD(p.vencimento)})`).join(", ")}. Confira se não é o mesmo pagamento.</span>`:""};
         ["input","change"].forEach(ev=>{$n(f,"valor").addEventListener(ev,chk);$n(f,"vencimento").addEventListener(ev,chk);fi.addEventListener(ev,chk)})}fi.addEventListener("change",()=>{const fo=S.fornecedores.find(k=>normF(k.nome)===normF(fi.value));if(fo&&fo.categoria&&novo){const c=$n(f,"categoria");if(c)c.value=fo.categoria}const px=$n(f,"pix");if(fo&&fo.pix&&px&&!px.value)px.value=fo.pix})},
     onSubmit:async fd=>{
-      const o={fornecedor:String(fd.get("fornecedor")||"").trim(),empresaId:String(fd.get("empresaId")||empPadrao()),descricao:String(fd.get("descricao")||"").trim(),categoria:String(fd.get("categoria")),valor:parseBRL(fd.get("valor")),vencimento:String(fd.get("vencimento")||""),forma:String(fd.get("forma")||""),contaId:String(fd.get("contaId")||""),prioridade:Number(fd.get("prioridade"))||0,contratoId:String(fd.get("contratoId")||""),pix:pixNorm(fd.get("pix"))};
+      const o={fornecedor:String(fd.get("fornecedor")||"").trim(),empresaId:String(fd.get("empresaId")||empPadrao()),descricao:String(fd.get("descricao")||"").trim(),categoria:String(fd.get("categoria")),valor:parseBRL(fd.get("valor")),vencimento:String(fd.get("vencimento")||""),forma:String(fd.get("forma")||""),contaId:fd.has("contaId")?String(fd.get("contaId")||""):(x.contaId||""),prioridade:Number(fd.get("prioridade"))||0,contratoId:String(fd.get("contratoId")||""),pix:pixNorm(fd.get("pix"))};
       if(fd.has("pagoEm"))o.pagoEm=String(fd.get("pagoEm"));
       if(o.prioridade===9){o.status="cancelado";o.spam=true}else if(!novo&&x.spam){o.status="aberto";o.spam=false}
       need(o.fornecedor,"Informe o fornecedor.");need(o.prioridade,"Escolha a prioridade (1, 2, 3 ou Spam).");need(!isNaN(o.valor)&&o.valor>0,"Informe o valor.");need(o.vencimento,"Informe o vencimento.");
@@ -3269,6 +3269,8 @@ auth.onAuthStateChanged(async u=>{
     atualizarPastas();
   }else{
     assinarDono("eq-"+S.perfil.equipeId);
+    // comercial: só as contas a pagar que ele mesmo lançou
+    db.collection("pagar").where("criadoPor","==",S.me).onSnapshot(snap=>{S.pagar=snap.docs.map(d=>({...d.data(),id:d.id}));S.loaded.pagar=true;agendar()},onErr);
   }
 });
 })();

@@ -59,7 +59,15 @@ service cloud.firestore {
       allow read: if gestao() || minhaPasta(pasta);
       allow write: if (gestao() || minhaPasta(pasta)) && (col != 'receber' || livrePg()) && assinaturaOk(col);
     }
-    match /pagar/{id} { allow read: if gestao(); allow write: if gestao() && livrePg(); }
+    // A pagar: a gestão vê tudo; o comercial lança e vê só as contas que ele criou, enquanto estiverem em aberto
+    function minhaConta(d){ return d.get('criadoPor', '') == email(); }
+    match /pagar/{id} {
+      allow read: if gestao() || (comercial() && minhaConta(resource.data));
+      allow create: if (gestao() && livrePg()) || (comercial() && minhaConta(request.resource.data) && request.resource.data.get('status', '') in ['aberto', 'cancelado']);
+      allow update: if (gestao() && livrePg()) || (comercial() && minhaConta(resource.data) && resource.data.get('status', '') in ['aberto', 'cancelado']
+        && minhaConta(request.resource.data) && request.resource.data.get('status', '') in ['aberto', 'cancelado']);
+      allow delete: if (gestao() && livrePg()) || (comercial() && minhaConta(resource.data) && resource.data.get('status', '') in ['aberto', 'cancelado']);
+    }
     match /transf/{id} { allow read: if gestao(); allow write: if gestao() && livreTr(); }
 
     // Lixeira e registro de alterações: todos registram, só a gestão consulta; o registro não pode ser apagado
