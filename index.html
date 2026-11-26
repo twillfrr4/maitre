@@ -1216,7 +1216,8 @@ function vPagar(){
     <td>${pill(st)}${st==="pago"?`<div class="s">${fmtD(x.pagoEm)}${x.comprovanteId?" · "+comprovanteLink(x):""}</div>`:""}${metaPg(x)}</td>
     <td class="r"><div class="row-act">${x.linhaDigitavel&&x.status!=="pago"?`<button class="btn sm ghost" data-a="copiar-linha" data-id="${x.id}" title="${esc(x.linhaDigitavel)}">Copiar código</button>`:""}${x.pix&&x.status!=="pago"&&!x.spam?`<button class="btn sm ghost" data-a="copiar-pix" data-id="${x.id}" title="${esc(x.pix)}">Copiar PIX</button>`:""}${W()&&x.status!=="pago"&&!x.spam?`<button class="btn sm primary" data-a="pagar-desp" data-id="${x.id}">Marcar pago</button>`:""}${W()&&x.status!=="pago"&&!x.spam&&x.status!=="cancelado"?`<button class="btn sm ghost" data-a="spam" data-id="${x.id}" title="Boleto não reconhecido">🚫 Spam</button>`:""}${W()&&x.spam?`<button class="btn sm ghost" data-a="nao-spam" data-id="${x.id}">Não é spam</button>`:""}${W()&&x.status==="pago"?`<button class="btn sm ghost" data-a="desfazer-desp" data-id="${x.id}">Desfazer</button>`:""}${W()?`<button class="btn sm ghost" data-a="edit-desp" data-id="${x.id}">Editar</button>`:""}</div></td></tr>`}).join("")}</tbody></table></div>`
    :`<div class="empty"><strong>${S.pagar.length?"Nada neste filtro":"Nenhuma conta a pagar cadastrada"}</strong>${S.pagar.length?"":"Registre fornecedores, folha, aluguel e impostos para ver o saldo previsto no painel."}${W()&&!S.pagar.length?`<button class="btn primary" data-a="nova-despesa">+ Cadastrar conta a pagar</button>`:""}</div>`;
-  return `<div class="head"><div><h1>A pagar</h1><p class="sub">Fornecedores, equipe, contas fixas e impostos.</p></div><div class="actions"><button class="btn" data-a="csv" data-v="pagar">Exportar planilha</button>${W()?`<button class="btn" data-a="dda">Importar DDA</button><button class="btn" data-a="lote-equipe">Equipe em lote</button>${lotesEquipe().length?`<button class="btn ghost" data-a="lotes">Lotes lançados</button>`:""}<button class="btn primary" data-a="nova-despesa">+ Conta a pagar</button>`:""}</div></div>
+  const nDup=W()?gemeos("pagar").length:0;
+  return `${nDup?`<div class="banner">${nDup} possível(is) lançamento(s) duplicado(s) em A pagar. <a href="#" data-a="dups" data-v="pagar">Revisar</a></div>`:""}<div class="head"><div><h1>A pagar</h1><p class="sub">Fornecedores, equipe, contas fixas e impostos.</p></div><div class="actions"><button class="btn" data-a="csv" data-v="pagar">Exportar planilha</button>${W()?`<button class="btn" data-a="dda">Importar DDA</button><button class="btn" data-a="lote-equipe">Equipe em lote</button>${lotesEquipe().length?`<button class="btn ghost" data-a="lotes">Lotes lançados</button>`:""}<button class="btn primary" data-a="nova-despesa">+ Conta a pagar</button>`:""}</div></div>
   <div class="toolbar"><div class="chips">${chipsFor("pf",UI.pf,S.pagar)}</div><div class="chips"><select class="search" style="width:auto" id="pp" aria-label="Prioridade"><option value="">Todas as prioridades</option>${[1,2,3,9].map(n=>`<option value="${n}" ${UI.pp===String(n)?"selected":""}>${n===9?"🚫 Spam":n+" · "+PRIO[n]}</option>`).join("")}</select><select class="search" style="width:auto" id="ps" aria-label="Ordenar"><option value="venc" ${UI.ps==="venc"?"selected":""}>Ordenar por vencimento</option><option value="prio" ${UI.ps==="prio"?"selected":""}>Ordenar por prioridade</option></select>${bankFilter("pb")}<input class="search" id="pq" type="search" placeholder="Buscar fornecedor ou categoria" value="${esc(UI.pq)}" data-q="pq"></div></div>
   <section class="panel">${body}${list.length?`<div class="panel-b" style="border-top:1px solid var(--line);display:flex;justify-content:space-between"><span class="muted">${list.length} item(ns)</span><b class="num">${brl(tot)}</b></div>`:""}</section>`;
 }
@@ -1531,7 +1532,12 @@ function formDespesa(x={}){
    (novo?F("repetir","Repetir por quantos meses",1,{type:"number",attrs:'min="1" max="24"',hint:"Para contas fixas (aluguel, contador…)"}):"")+
    (x.status==="pago"?F("pagoEm","Pago em",x.pagoEm,{type:"date"}):""),
    {registro:x,danger:novo?null:{label:"Excluir",fn:async()=>{dlg.close();if(await confirmBox(`Excluir <b>${esc(x.fornecedor)}</b> (${brl(x.valor)})?`))await act(()=>db.collection("pagar").doc(x.id).delete(),"Conta excluída")}},
-    onOpen:f=>{const fi=$n(f,"fornecedor");if(!fi)return;fi.addEventListener("change",()=>{const fo=S.fornecedores.find(k=>normF(k.nome)===normF(fi.value));if(fo&&fo.categoria&&novo){const c=$n(f,"categoria");if(c)c.value=fo.categoria}const px=$n(f,"pix");if(fo&&fo.pix&&px&&!px.value)px.value=fo.pix})},
+    onOpen:f=>{const fi=$n(f,"fornecedor");if(!fi)return;
+      if(novo){const box=document.createElement("div");box.className="fld full banner";box.hidden=true;box.style.margin="0";$n(f,"valor").closest(".fld").after(box);
+        const chk=()=>{const v=parseBRL($n(f,"valor").value),d=$n(f,"vencimento").value,nm=tokens(fi.value);if(isNaN(v)||!v){box.hidden=true;return}
+          const g=S.pagar.filter(p=>p.status!=="cancelado"&&p.valor===v&&Math.abs((new Date((p.status==="pago"?p.pagoEm:p.vencimento)||d)-new Date(d||todayISO()))/864e5)<=5&&(!nm.length||tokens(p.fornecedor).some(w=>nm.includes(w))||p.origem==="extrato"));
+          box.hidden=!g.length;box.innerHTML=g.length?`<span>Atenção: já existe ${g.map(p=>`<b>${esc(p.fornecedor)}</b> de ${brl(p.valor)} (${p.status==="pago"?"pago em "+fmtD(p.pagoEm)+(p.contaId?" · "+esc(contaNome(p.contaId)):""):"vence "+fmtD(p.vencimento)})`).join(", ")}. Confira se não é o mesmo pagamento.</span>`:""};
+        ["input","change"].forEach(ev=>{$n(f,"valor").addEventListener(ev,chk);$n(f,"vencimento").addEventListener(ev,chk);fi.addEventListener(ev,chk)})}fi.addEventListener("change",()=>{const fo=S.fornecedores.find(k=>normF(k.nome)===normF(fi.value));if(fo&&fo.categoria&&novo){const c=$n(f,"categoria");if(c)c.value=fo.categoria}const px=$n(f,"pix");if(fo&&fo.pix&&px&&!px.value)px.value=fo.pix})},
     onSubmit:async fd=>{
       const o={fornecedor:String(fd.get("fornecedor")||"").trim(),empresaId:String(fd.get("empresaId")||empPadrao()),descricao:String(fd.get("descricao")||"").trim(),categoria:String(fd.get("categoria")),valor:parseBRL(fd.get("valor")),vencimento:String(fd.get("vencimento")||""),forma:String(fd.get("forma")||""),contaId:String(fd.get("contaId")||""),prioridade:Number(fd.get("prioridade"))||0,contratoId:String(fd.get("contratoId")||""),pix:pixNorm(fd.get("pix"))};
       if(fd.has("pagoEm"))o.pagoEm=String(fd.get("pagoEm"));
@@ -1692,20 +1698,37 @@ function inferForma(memo,v){
 }
 /* saldo do sistema: saldo inicial (data de corte) + tudo que foi pago/recebido/transferido nessa conta depois da data */
 // baixa feita depois que o saldo de partida foi gravado (ajuste manual ou importação do extrato)?
-// saldo digitado (Ajustar saldo): vale a hora da baixa. Saldo vindo do extrato: entra se o valor NÃO aparece no extrato daquele dia.
-function depoisDoSaldo(c,x,v){
-  if(c.saldoEm){const ts=x.atualizadoEm||x.criadoEm||"";return !!(ts&&ts>c.saldoEm)}
-  const a=Math.abs(v!=null?v:((x.valorPago??x.valor)||0));const d0=c.saldoData;
-  return !allTx().some(t=>txConta(t)===c.id&&t.d===d0&&Math.abs(t.v)===a&&!t.ref)}
-function saldoConta(c){
-  const d0=c.saldoData||"0000-00-00";let s=c.saldoInicial||0;
-  // no próprio dia do saldo inicial (vindo do extrato), entra só o que ainda não veio no extrato (baixa manual sem vínculo)
-  const conta=(d,x,semExtrato,v)=>(d||"")>d0||((d||"")===d0&&semExtrato&&depoisDoSaldo(c,x,v));
-  for(const x of S.receber)if(x.status==="pago"&&x.contaId===c.id&&conta(x.pagoEm,x,!x.extratoKey))s+=(x.valorPago??x.valor)||0;
-  for(const x of S.pagar)if(x.status==="pago"&&x.contaId===c.id&&conta(x.pagoEm,x,!x.extratoKey))s-=(x.valorPago??x.valor)||0;
-  for(const t of S.transf){if(t.de===c.id&&conta(t.data,t,!t.extratoDe,t.valor))s-=t.valor||0;if(t.para===c.id&&conta(t.data,t,!t.extratoPara,t.valor))s+=t.valor||0}
-  return s;
+/* ---------- Saldo da conta ----------
+   Parte do último saldo informado pelo banco (extrato OFX ou "Ajustar saldo") e soma o que foi baixado no sistema e
+   ainda não está nesse saldo: baixas com data depois do extrato, e baixas manuais anteriores que não têm o pagamento
+   correspondente no extrato (essas aparecem como divergência: duplicado, banco errado ou data errada). */
+function itensConta(c){
+  const it=[];
+  for(const x of S.receber)if(x.status==="pago"&&x.contaId===c.id)it.push({col:"receber",x,d:x.pagoEm||"",v:(x.valorPago??x.valor)||0,lig:x.extratoKey||""});
+  for(const x of S.pagar)if(x.status==="pago"&&x.contaId===c.id)it.push({col:"pagar",x,d:x.pagoEm||"",v:-((x.valorPago??x.valor)||0),lig:x.extratoKey||""});
+  for(const t of S.transf){if(t.de===c.id)it.push({col:"transf",x:t,d:t.data||"",v:-(t.valor||0),lig:t.extratoDe||"",lado:"De"});if(t.para===c.id)it.push({col:"transf",x:t,d:t.data||"",v:t.valor||0,lig:t.extratoPara||"",lado:"Para"})}
+  return it;
 }
+function saldoDetalhe(c){
+  const temB=c.saldoBanco!=null&&!!c.saldoBancoData;
+  const base=temB?c.saldoBanco:(c.saldoInicial||0);
+  const dB=temB?c.saldoBancoData:(c.saldoData||"0000-00-00");
+  const piso=c.saldoData&&c.saldoData<dB?c.saldoData:dB;   // antes disso é histórico, já dentro do saldo
+  const livres=allTx().filter(t=>txConta(t)===c.id&&!t.ref);  // movimentos do extrato sem lançamento ligado
+  const usados=new Set();
+  const noExtrato=(it)=>{const a=Math.abs(it.v);const t=livres.find(t=>!usados.has(t.uid)&&Math.abs(t.v)===a&&Math.abs((new Date(t.d)-new Date(it.d))/864e5)<=3);if(t){usados.add(t.uid);return t}return null};
+  let depois=0,diverg=0;const L={depois:[],diverg:[],casados:[]};
+  for(const it of itensConta(c)){
+    if(it.d>dB){depois+=it.v;L.depois.push(it);continue}
+    if(it.lig||it.d<piso)continue;                       // já está no saldo do banco
+    if(it.d===dB&&c.saldoEm){const ts=it.x.atualizadoEm||it.x.criadoEm||"";if(!(ts>c.saldoEm))continue}
+    const t=noExtrato(it);if(t){L.casados.push({...it,t});continue}   // o pagamento está no extrato, só falta conciliar
+    if(it.d===dB||!temB){depois+=it.v;L.depois.push(it);continue}     // mesmo dia do extrato: pode ter sido feito depois
+    diverg+=it.v;L.diverg.push(it);
+  }
+  return {saldo:base+depois+diverg,base,dB,depois,diverg,L,temB};
+}
+function saldoConta(c){return saldoDetalhe(c).saldo}
 function semConta(){return S.receber.filter(x=>x.status==="pago"&&!x.contaId).length+S.pagar.filter(x=>x.status==="pago"&&!x.contaId).length}
 function bancosResumo(){
   const cs=contasOrd();if(!cs.length)return "";
@@ -1714,74 +1737,85 @@ function bancosResumo(){
   <div class="banks">${cs.map(c=>{const s=saldoConta(c);return `<div class="bk" style="--bc:${esc(c.cor||"var(--muted)")}"><span class="bk-n">${esc(c.nome)}</span><span class="num bk-v ${s<0?"neg":""}">${brl(s)}</span>${c.saldoBanco!=null?`<span class="bk-d">extrato ${fmtD(c.saldoBancoData)}: ${brl(c.saldoBanco)}</span>`:`<span class="bk-d">${c.saldoData?"desde "+fmtD(c.saldoData):"sem saldo inicial"}</span>`}</div>`}).join("")}
   <div class="bk total"><span class="bk-n">Consolidado</span><span class="num bk-v ${tot<0?"neg":""}">${brl(tot)}</span><span class="bk-d">${cs.length} conta(s)</span></div></div></section>`;
 }
-/* ---------- Verificar diferença de saldo de uma conta ---------- */
-function diagConta(c){
-  const d0=c.saldoData||"0000-00-00",dB=c.saldoBancoData||"9999-99-99";
-  const T=allTx().filter(t=>txConta(t)===c.id);
-  const txPer=T.filter(t=>t.d>d0&&t.d<=dB);
-  const somaTx=txPer.reduce((s,t)=>s+(t.v||0),0);
-  const bancoCalc=(c.saldoInicial||0)+somaTx;
-  const gapBanco=c.saldoBanco!=null?c.saldoBanco-bancoCalc:0;
-  // itens do sistema nesta conta
-  const itens=[];
-  for(const x of S.receber)if(x.status==="pago"&&x.contaId===c.id)itens.push({col:"receber",x,d:x.pagoEm||"",v:(x.valorPago??x.valor)||0});
-  for(const x of S.pagar)if(x.status==="pago"&&x.contaId===c.id)itens.push({col:"pagar",x,d:x.pagoEm||"",v:-((x.valorPago??x.valor)||0)});
-  for(const t of S.transf){if(t.de===c.id)itens.push({col:"transf",x:t,d:t.data||"",v:-(t.valor||0),lado:"De"});if(t.para===c.id)itens.push({col:"transf",x:t,d:t.data||"",v:t.valor||0,lado:"Para"})}
-  const linkTx=it=>it.col==="transf"?(it.lado==="De"?it.x.extratoDe:it.x.extratoPara):it.x.extratoKey;
-  const byUid={};for(const t of allTx())byUid[t.uid]=t;
-  const per=itens.filter(it=>it.d>d0&&it.d<=dB),depois=itens.filter(it=>it.d>dB);
-  // baixas manuais no próprio dia do saldo inicial (contam no saldo); procura o mesmo valor no extrato do dia
-  const mesmoDia=c.saldoBancoData===d0?itens.filter(it=>it.d===d0&&!linkTx(it)&&depoisDoSaldo(c,it.x,it.v)).map(it=>{const t=T.find(t=>t.d===d0&&t.v===it.v);return {...it,noExtrato:t||null}}):[];
-  const semExtrato=[],outroBanco=[],valorDif=[];
-  for(const it of per){const u=linkTx(it);const t=u&&byUid[u];
-    if(!t)semExtrato.push(it);
-    else if(txConta(t)!==c.id)outroBanco.push({...it,t});
-    else if(Math.abs(Math.abs(t.v)-Math.abs(it.v))>0)valorDif.push({...it,t,dif:it.v-t.v})}
-  // conciliados em outro banco: o extrato desta conta aponta para item gravado em outra conta
-  const foraDaqui=[];
-  for(const t of txPer){if(!t.ref||!(t.st==="conciliado"||t.st==="lancado"))continue;const x=byId(S[t.ref.col]||[],t.ref.id);if(!x)continue;
-    const conta=t.ref.col==="transf"?(t.v<0?x.de:x.para):x.contaId;if(conta&&conta!==c.id)foraDaqui.push({col:t.ref.col,x,t,conta})}
-  const ignorados=txPer.filter(t=>t.st==="ignorado"),pendentes=txPer.filter(t=>!t.st||t.st==="pendente");
-  const dup=[];const tr=S.transf.filter(t=>t.de===c.id||t.para===c.id);
-  for(let i=0;i<tr.length;i++)for(let j=i+1;j<tr.length;j++){const a=tr[i],b=tr[j];if(a.de===b.de&&a.para===b.para&&a.valor===b.valor&&Math.abs((new Date(a.data)-new Date(b.data))/864e5)<=3)dup.push([a,b])}
-  const sistema=saldoConta(c);
-  return {d0,dB,gapBanco,bancoCalc,semExtrato,outroBanco,foraDaqui,valorDif,ignorados,pendentes,depois,dup,sistema,
-    mesmoDia,dif:c.saldoBanco!=null?sistema-c.saldoBanco:null,somaDepois:depois.reduce((s,i)=>s+i.v,0)};
+/* ---------- Duplicados e verificação de saldo ---------- */
+// possíveis duplicados em A pagar / A receber: mesmo valor, datas a até 3 dias, mesmo favorecido ou um deles veio do extrato
+function gemeos(col){
+  const L=(col==="pagar"?S.pagar:S.receber).filter(x=>x.status!=="cancelado"&&!x.naoDup);
+  const dt=x=>(x.status==="pago"?x.pagoEm:x.vencimento)||"";const nome=x=>col==="pagar"?x.fornecedor:(clienteNome(x.clienteId)||x.descricao);
+  const por={};for(const x of L)(por[x.valor]=por[x.valor]||[]).push(x);
+  const pares=[];const visto=new Set();
+  for(const v in por){const g=por[v];if(g.length<2)continue;
+    for(let a=0;a<g.length;a++)for(let b=a+1;b<g.length;b++){const x=g[a],y=g[b];
+      if(Math.abs((new Date(dt(x))-new Date(dt(y)))/864e5)>3)continue;
+      if((x.dupOk||[]).includes(y.id)||(y.dupOk||[]).includes(x.id))continue;
+      if(x.extratoKey&&y.extratoKey&&x.extratoKey!==y.extratoKey)continue;          // dois pagamentos reais no extrato
+      if(x.origem==="lote"&&y.origem==="lote"&&x.criadoEm===y.criadoEm)continue;     // mesma lista: pessoas diferentes
+      const mesmoNome=tokens(nome(x)).some(w=>tokens(nome(y)).includes(w));
+      const umDoExtrato=x.origem==="extrato"||y.origem==="extrato";
+      if(!mesmoNome&&!umDoExtrato)continue;
+      const k=[x.id,y.id].sort().join("|");if(visto.has(k))continue;visto.add(k);pares.push([x,y])}}
+  return pares;
+}
+function formDuplicados(col){
+  const P=gemeos(col);const nome=x=>col==="pagar"?x.fornecedor:(clienteNome(x.clienteId)||x.descricao);
+  const cart=x=>`<div style="flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;padding:8px 10px"><b>${esc(nome(x)||"")}</b> <span class="num">${brl(x.valor)}</span>
+    <div class="s">${x.status==="pago"?`pago em ${fmtD(x.pagoEm)} · ${esc(contaNome(x.contaId)||"sem banco")}`:`em aberto · vence ${fmtD(x.vencimento)}`}${x.extratoKey?" · <b>ligado ao extrato</b>":""}</div>
+    <div class="s">${esc(x.descricao||"")}${x.origem?` · veio de ${x.origem==="extrato"?"Lançar (extrato)":x.origem==="lote"?"Equipe em lote":x.origem==="dda"?"DDA":esc(x.origem)}`:""}${x.criadoEm?` · criado ${new Date(x.criadoEm).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}`:""}</div>
+    ${W()?`<button type="button" class="btn sm" data-dup-del="${x.id}" style="margin-top:6px">Excluir este</button>`:""}</div>`;
+  openDlg(`Possíveis duplicados · ${col==="pagar"?"A pagar":"A receber"}`,P.length?`<p class="fld full hint" style="margin:0"><span>Lançamentos com o mesmo valor e datas próximas. Exclua o que estiver sobrando (de preferência o que <b>não</b> está ligado ao extrato), ou marque “Não é duplicado”. Exclusões vão para a lixeira.</span></p>`+
+     P.map(([x,y],i)=>`<div class="fld full" data-par="${i}" style="border-top:1px solid var(--line);padding-top:10px"><div style="display:flex;gap:8px;flex-wrap:wrap">${cart(x)}${cart(y)}</div>${W()?`<button type="button" class="btn sm ghost" data-dup-ok="${i}" style="margin-top:6px">Não é duplicado</button>`:""}</div>`).join("")
+     :`<p class="fld full">Nenhum possível duplicado encontrado.</p>`,
+   {submit:"Fechar",onOpen:f=>{dlg.style.maxWidth="min(900px,96vw)";dlg.style.width="min(900px,96vw)";
+     f.addEventListener("click",async e=>{const d=e.target.closest("[data-dup-del]"),o=e.target.closest("[data-dup-ok]");if(!d&&!o)return;e.preventDefault();
+       if(d){const x=byId(col==="pagar"?S.pagar:S.receber,d.dataset.dupDel);if(!x)return;d.disabled=true;
+         try{if(x.extratoKey){const t=txByUid(x.extratoKey);if(t)await setTx(t,{st:"pendente",ref:null})}
+           await write(()=>docRef(col,x).delete());d.closest("[data-par]").style.opacity=".35";toast("Excluído · está na lixeira")}catch(err){d.disabled=false}}
+       if(o){const [x,y]=P[o.dataset.dupOk];o.disabled=true;
+         await write(()=>docRef(col,x).set({...strip(x),dupOk:[...(x.dupOk||[]),y.id],...stamp()}));o.closest("[data-par]").style.opacity=".35";toast("Marcado como não duplicado")}})},
+    onSubmit:async()=>{dlg.style.maxWidth="";dlg.style.width=""}});
 }
 function verificarConta(cid){
-  const c=byId(S.contas,cid);if(!c)return;const r=diagConta(c);
-  const sinal=v=>`<span class="num" style="color:${v<0?"var(--bad)":"var(--good,inherit)"}">${v<0?"−":"+"} ${brl(Math.abs(v))}</span>`;
-  const nomeIt=it=>it.col==="transf"?`Transferência ${contaNome(it.x.de)} → ${contaNome(it.x.para)}`:esc(itemNome(it.col,it.x)||"")+(it.x.descricao?` · ${esc(it.x.descricao)}`:"");
-  const tab=(linhas)=>`<div class="tbl-wrap" style="max-height:220px;overflow:auto"><table><tbody>${linhas.join("")}</tbody></table></div>`;
-  const blocos=[];
-  const bloco=(tit,txt,linhas,acao)=>blocos.push(`<div class="fld full" style="border:1px solid var(--line);border-radius:8px;padding:10px 12px"><b>${tit}</b><p class="s" style="margin:4px 0 8px">${txt}</p>${linhas&&linhas.length?tab(linhas):""}${acao||""}</div>`);
-  if(r.foraDaqui.length)bloco(`${r.foraDaqui.length} baixa(s) do extrato deste banco gravada(s) em outro banco`,"O movimento saiu ou entrou nesta conta, mas o lançamento ficou com outro banco. Isso tira o valor de uma conta e põe na outra. Use Corrigir para passar todos para esta conta.",
-    r.foraDaqui.map(o=>`<tr><td class="num">${fmtD(o.t.d)}</td><td>${o.col==="transf"?`Transferência ${contaNome(o.x.de)} → ${contaNome(o.x.para)}`:esc(itemNome(o.col,o.x)||"")}<div class="s">está em ${esc(contaNome(o.conta))}</div></td><td class="r">${sinal(o.t.v)}</td></tr>`),
+  const c=byId(S.contas,cid);if(!c)return;const r=saldoDetalhe(c);
+  const sinal=v=>`<span class="num" style="color:${v<0?"var(--bad)":"inherit"}">${v<0?"−":"+"} ${brl(Math.abs(v))}</span>`;
+  const nomeIt=it=>it.col==="transf"?`Transferência ${esc(contaNome(it.x.de))} → ${esc(contaNome(it.x.para))}`:esc(itemNome(it.col,it.x)||"")+(it.x.descricao?` <span class="s">· ${esc(it.x.descricao)}</span>`:"");
+  // gêmeo de cada item contado: outro lançamento com o mesmo valor e data próxima
+  const gemeo=it=>{if(it.col==="transf")return null;const L=it.col==="pagar"?S.pagar:S.receber;const a=Math.abs(it.v);
+    return L.find(y=>y.id!==it.x.id&&y.status==="pago"&&((y.valorPago??y.valor)||0)===a&&Math.abs((new Date(y.pagoEm)-new Date(it.d))/864e5)<=3&&!(it.x.dupOk||[]).includes(y.id))||null};
+  const linha=(it,extra)=>`<tr><td class="num" style="white-space:nowrap">${fmtD(it.d)}</td><td>${nomeIt(it)}${extra||""}</td><td class="r">${sinal(it.v)}</td>
+    <td class="r">${W()&&it.col!=="transf"?`<button type="button" class="btn sm ghost" data-vf-edit="${it.col}:${it.x.id}">Abrir</button>`:""}</td></tr>`;
+  const tab=L=>`<div class="tbl-wrap" style="max-height:240px;overflow:auto"><table><tbody>${L.join("")}</tbody></table></div>`;
+  const B=[];const bloco=(tit,txt,linhas,acao)=>B.push(`<div class="fld full" style="border:1px solid var(--line);border-radius:8px;padding:10px 12px"><b>${tit}</b><p class="s" style="margin:4px 0 8px">${txt}</p>${linhas&&linhas.length?tab(linhas):""}${acao||""}</div>`);
+  // baixas do extrato deste banco gravadas em outro banco
+  const fora=[];for(const t of allTx()){if(txConta(t)!==c.id||!t.ref)continue;const x=byId(S[t.ref.col]||[],t.ref.id);if(!x)continue;
+    const conta=t.ref.col==="transf"?(t.v<0?x.de:x.para):x.contaId;if(conta&&conta!==c.id)fora.push({col:t.ref.col,x,t,conta})}
+  if(fora.length)bloco(`${fora.length} pagamento(s) deste extrato gravado(s) em outro banco`,"Saíram ou entraram nesta conta, mas o lançamento está com outro banco. Corrigir passa todos para esta conta.",
+    fora.map(o=>`<tr><td class="num">${fmtD(o.t.d)}</td><td>${o.col==="transf"?"Transferência":esc(itemNome(o.col,o.x)||"")}<div class="s">está em ${esc(contaNome(o.conta))}</div></td><td class="r">${sinal(o.t.v)}</td><td></td></tr>`),
     W()?`<button type="button" class="btn sm primary" id="vfFix" style="margin-top:8px">Corrigir: passar para ${esc(c.nome)}</button>`:"");
-  if(r.mesmoDia.length){const ja=r.mesmoDia.filter(i=>i.noExtrato);
-    bloco(`${r.mesmoDia.length} baixa(s) manual(is) em ${fmtD(r.d0)}, o mesmo dia do último extrato`,`Elas entram no saldo do sistema porque não estão ligadas a nenhum movimento do extrato. ${ja.length?`<b>${ja.length} delas têm um movimento de mesmo valor no extrato desse dia</b>: provavelmente o pagamento já estava no extrato e foi lançado de novo. Abra a Conciliação, procure o movimento e use Desfazer + Vincular a esta conta, ou exclua a conta repetida.`:"Se foram feitas depois de baixar o extrato, está certo: somem da diferença quando você importar o extrato seguinte."} Total: ${brl(r.mesmoDia.reduce((s,i)=>s+i.v,0))}.`,
-      r.mesmoDia.map(it=>`<tr><td class="num">${fmtD(it.d)}</td><td>${nomeIt(it)}<div class="s">${it.noExtrato?`<b>no extrato:</b> ${esc(it.noExtrato.memo||"")} · ${it.noExtrato.st==="pendente"||!it.noExtrato.st?"pendente":it.noExtrato.st==="ignorado"?"ignorado":"já ligado a outro lançamento"}`:"não aparece no extrato importado"}</div></td><td class="r">${sinal(it.v)}</td></tr>`))}
-  if(r.semExtrato.length)bloco(`${r.semExtrato.length} lançamento(s) pago(s) neste banco sem movimento no extrato`,"Estão no período do extrato, marcados como pagos nesta conta, mas não aparecem no extrato. Podem ter sido pagos por outro banco, em outra data, ou estar duplicados. Abra cada um e confira o banco e a data.",
-    r.semExtrato.map(it=>`<tr><td class="num">${fmtD(it.d)}</td><td>${nomeIt(it)}<div class="s">${it.col==="receber"?"A receber":it.col==="pagar"?"A pagar":"Transferência"}</div></td><td class="r">${sinal(it.v)}</td></tr>`));
-  if(r.ignorados.length)bloco(`${r.ignorados.length} movimento(s) ignorado(s)`,"Dinheiro que entrou ou saiu do banco e não está no sistema. Só deve ficar ignorado se for algo que realmente não interessa. Transferências entre contas devem ser lançadas como transferência.",
-    r.ignorados.map(t=>`<tr><td class="num">${fmtD(t.d)}</td><td>${esc(t.memo||"")}</td><td class="r">${sinal(t.v)}</td></tr>`));
-  if(r.pendentes.length)bloco(`${r.pendentes.length} movimento(s) pendente(s) na conciliação`,"Ainda não foram resolvidos.",r.pendentes.slice(0,30).map(t=>`<tr><td class="num">${fmtD(t.d)}</td><td>${esc(t.memo||"")}</td><td class="r">${sinal(t.v)}</td></tr>`));
-  if(r.valorDif.length)bloco(`${r.valorDif.length} baixa(s) com valor diferente do extrato`,"O valor pago no sistema não é igual ao do extrato.",r.valorDif.map(o=>`<tr><td class="num">${fmtD(o.d)}</td><td>${nomeIt(o)}<div class="s">extrato ${brl(Math.abs(o.t.v))} · sistema ${brl(Math.abs(o.v))}</div></td><td class="r">${sinal(o.dif)}</td></tr>`));
-  if(r.dup.length)bloco(`${r.dup.length} transferência(s) que parecem repetidas`,"Mesmo valor, mesmas contas e datas próximas. Exclua a que não tem extrato em Bancos → Transferências.",r.dup.map(([a,b])=>`<tr><td class="num">${fmtD(a.data)} e ${fmtD(b.data)}</td><td>${contaNome(a.de)} → ${contaNome(a.para)}</td><td class="r num">${brl(a.valor)}</td></tr>`));
-  if(Math.abs(r.gapBanco)>1)bloco("O saldo inicial não fecha com o extrato",`Saldo inicial de ${brl(c.saldoInicial||0)} em ${fmtD(r.d0)} + movimentos do extrato = ${brl(r.bancoCalc)}, mas o banco informa ${brl(c.saldoBanco)} (diferença de ${brl(r.gapBanco)}). Falta importar algum período do extrato ou o saldo inicial está errado. Importe o extrato desde ${fmtD(r.d0)} ou use Ajustar saldo.`,[]);
-  if(r.depois.length)bloco(`${r.depois.length} lançamento(s) depois do último extrato (${fmtD(r.dB)})`,`Já estão no saldo do sistema, mas ainda não no extrato importado. Isso é normal: somam ${brl(r.somaDepois)} e somem da diferença quando você importar o extrato mais novo.`,
-    r.depois.slice(0,30).map(it=>`<tr><td class="num">${fmtD(it.d)}</td><td>${nomeIt(it)}</td><td class="r">${sinal(it.v)}</td></tr>`));
-  const ok=!blocos.length;
+  const extras=[...r.L.diverg,...r.L.depois];const dups=extras.map(it=>({it,g:gemeo(it)})).filter(o=>o.g);
+  if(dups.length)bloco(`${dups.length} possível(is) duplicado(s)`,"Existe outro lançamento pago com o mesmo valor e data próxima. Se for o mesmo pagamento, exclua o que estiver sobrando (normalmente o que não está ligado ao extrato).",
+    dups.map(({it,g})=>linha(it,`<div class="s">igual a: ${esc(itemNome(it.col,g)||"")} · ${fmtD(g.pagoEm)} · ${esc(contaNome(g.contaId)||"sem banco")}${g.extratoKey?" · ligado ao extrato":""}</div>`)));
+  const dv=r.L.diverg.filter(it=>!dups.some(d=>d.it===it));
+  if(dv.length)bloco(`${dv.length} pago(s) neste banco que não aparece(m) no extrato`,`Têm data até ${fmtD(r.dB)}, mas o extrato não mostra esses valores. Confira o banco e a data de cada um.`,dv.map(it=>linha(it)));
+  if(r.L.casados.length)bloco(`${r.L.casados.length} pagamento(s) já no extrato, falta conciliar`,"Não estão sendo contados duas vezes. Em Conciliação, use Confirmar ou Vincular.",r.L.casados.map(it=>linha(it,`<div class="s">no extrato: ${esc(it.t.memo||"")}</div>`)));
+  const dep=r.L.depois.filter(it=>!dups.some(d=>d.it===it));
+  if(dep.length)bloco(`${dep.length} lançamento(s) depois do extrato de ${fmtD(r.dB)}`,"Pagos ou recebidos no sistema e ainda não vistos em extrato. É normal: são conferidos quando você importar o próximo extrato.",dep.map(it=>linha(it)));
   openDlg(`Verificar saldo · ${c.nome}`,`<div class="fld full"><table><tbody>
-     <tr><td>Saldo no sistema</td><td class="r num"><b>${brl(r.sistema)}</b></td></tr>
-     <tr><td>Saldo do último extrato (${c.saldoBancoData?fmtD(c.saldoBancoData):"—"})</td><td class="r num">${c.saldoBanco!=null?brl(c.saldoBanco):"—"}</td></tr>
-     <tr><td><b>Diferença</b></td><td class="r num"><b>${r.dif==null?"—":brl(r.dif)}</b></td></tr></tbody></table></div>
-   ${ok?`<p class="fld full">Nenhum problema encontrado. ${r.dif&&Math.abs(r.dif)>1?"A diferença pode vir de um período sem extrato importado antes do saldo inicial.":""}</p>`:blocos.join("")}`,
-   {submit:"Fechar",onOpen:f=>{dlg.style.maxWidth="min(820px,96vw)";dlg.style.width="min(820px,96vw)";const b=f.querySelector("#vfFix");
-     if(b)b.onclick=async()=>{b.disabled=true;try{await write(async()=>{for(const o of r.foraDaqui){
+     <tr><td>${r.temB?`Saldo do banco em ${fmtD(r.dB)} (${c.saldoEm?"ajuste manual":"extrato"})`:"Saldo inicial"}</td><td class="r num">${brl(r.base)}</td></tr>
+     <tr><td>Lançado no sistema depois disso</td><td class="r">${sinal(r.depois)}</td></tr>
+     ${r.diverg?`<tr><td>Pago neste banco sem aparecer no extrato</td><td class="r">${sinal(r.diverg)}</td></tr>`:""}
+     <tr><td><b>Saldo no sistema</b></td><td class="r num"><b>${brl(r.saldo)}</b></td></tr></tbody></table></div>
+   ${B.length?B.join(""):`<p class="fld full">Nenhum problema encontrado.</p>`}
+   ${W()?`<p class="fld full s" style="margin:0">O saldo não bate com o app do banco? <a href="#" id="vfAjuste">Ajustar saldo para o valor do banco agora</a>.</p>`:""}`,
+   {submit:"Fechar",onOpen:f=>{dlg.style.maxWidth="min(860px,96vw)";dlg.style.width="min(860px,96vw)";
+     const fechar=()=>{dlg.close();dlg.style.maxWidth="";dlg.style.width=""};
+     const aj=f.querySelector("#vfAjuste");if(aj)aj.onclick=e=>{e.preventDefault();fechar();setTimeout(()=>formAjuste(c),40)};
+     f.addEventListener("click",e=>{const b=e.target.closest("[data-vf-edit]");if(!b)return;e.preventDefault();const [col,id]=b.dataset.vfEdit.split(":");const x=byId(S[col],id);fechar();
+       setTimeout(()=>col==="pagar"?formDespesa(x):formReceita(x),40)});
+     const b=f.querySelector("#vfFix");
+     if(b)b.onclick=async()=>{b.disabled=true;try{await write(async()=>{for(const o of fora){
         if(o.col==="transf")await db.collection("transf").doc(o.x.id).set({...strip(o.x),[o.t.v<0?"de":"para"]:c.id,...stamp()});
         else await docRef(o.col,o.x).set({...strip(o.x),contaId:c.id,pagoEm:o.t.d,...stamp()})}});
-       dlg.close();dlg.style.maxWidth="";dlg.style.width="";toast(`${r.foraDaqui.length} lançamento(s) passado(s) para ${c.nome}`)}catch(e){b.disabled=false}}},
+       fechar();toast(`${fora.length} lançamento(s) passado(s) para ${c.nome}`)}catch(e){b.disabled=false}}},
     onSubmit:async()=>{dlg.style.maxWidth="";dlg.style.width=""}});
 }
 function vBancos(){
@@ -1790,8 +1824,8 @@ function vBancos(){
   const tot=cs.filter(c=>c.ativo!==false).reduce((s,c)=>s+saldoConta(c),0);
   const sc=semConta();
   const tr=S.transf.slice().sort((a,b)=>(b.data||"").localeCompare(a.data||"")).slice(0,12);
-  const body=cs.length?`<div class="tbl-wrap"><table><thead><tr><th>Conta</th><th class="r">Saldo no sistema</th><th class="r">Saldo do último extrato</th><th class="r">Diferença</th><th>Conciliação</th><th class="r"></th></tr></thead><tbody>${cs.map(c=>{
-    const s=saldoConta(c);const dif=c.saldoBanco!=null?s-c.saldoBanco:null;
+  const body=cs.length?`<div class="tbl-wrap"><table><thead><tr><th>Conta</th><th class="r">Saldo no sistema</th><th class="r">Saldo do último extrato</th><th class="r" title="Pagamentos marcados neste banco que não aparecem no extrato (possível duplicado, banco ou data errados)">Divergência</th><th>Conciliação</th><th class="r"></th></tr></thead><tbody>${cs.map(c=>{
+    const sd=saldoDetalhe(c);const s=sd.saldo;const dif=c.saldoBanco!=null?sd.diverg:null;
     return `<tr${c.ativo===false?' style="opacity:.55"':""}><td>${contaTag(c.id)}<div class="s">${esc([c.agencia&&"ag. "+c.agencia,c.numero&&"c/c "+c.numero].filter(Boolean).join(" · ")||"")}${c.ativo===false?" · inativa":""}</div></td>
      <td class="r num"><b>${brl(s)}</b><div class="s">${c.saldoData?"desde "+fmtD(c.saldoData):"sem saldo inicial"}</div></td>
      <td class="r num">${c.saldoBanco!=null?brl(c.saldoBanco)+`<div class="s">${fmtD(c.saldoBancoData)}</div>`:"—"}</td>
@@ -1830,7 +1864,7 @@ function formAjuste(c){
   const atual=saldoConta(c);
   openDlg(`Ajustar saldo · ${esc(c.nome)}`,
    `<p class="fld full" style="margin:0">Saldo no sistema hoje: <b class="num">${brl(atual)}</b>. Informe o saldo real do banco no fim de um dia. Movimentos com data posterior continuam sendo somados.</p>`+
-   F("valor","Saldo real (R$)",c.saldoBanco!=null?brlIn(c.saldoBanco):brlIn(atual),{req:true,attrs:'inputmode="decimal"'})+F("data","No fim do dia",c.saldoBancoData||todayISO(),{type:"date",req:true}),
+   F("valor","Saldo real (R$)",c.saldoBanco!=null?brlIn(c.saldoBanco):brlIn(atual),{req:true,attrs:'inputmode="decimal"'})+F("data","Data",todayISO(),{type:"date",req:true,hint:"Digite o saldo que o app do banco mostra agora. O que já foi marcado como pago até agora fica considerado dentro dele."}),
    {submit:"Ajustar",onSubmit:async fd=>{const v=parseBRL(fd.get("valor"));need(!isNaN(v),"Informe o saldo.");const d=String(fd.get("data")||"");need(d,"Informe a data.");
      await write(()=>db.collection("contas").doc(c.id).set({...strip(c),saldoInicial:v,saldoData:d,saldoBanco:v,saldoBancoData:d,saldoEm:new Date().toISOString(),...stamp()}));toast("Saldo ajustado")}});
 }
@@ -2031,7 +2065,7 @@ async function gravarExtrato(r,conta,arquivo){
     const ult=r.txs.reduce((m,t)=>t.d>m?t.d:m,"");
     const fresh=byId(S.contas,conta.id)||conta;
     const upd={...strip(fresh),ofxId:conta.ofxId||fresh.ofxId,ultimoExtrato:{arquivo,importadoEm:new Date().toISOString(),ate:ult}};
-    if(r.saldo!=null&&(!fresh.saldoBancoData||ult>=fresh.saldoBancoData)){upd.saldoBanco=r.saldo;upd.saldoBancoData=ult}
+    if(r.saldo!=null&&(!fresh.saldoBancoData||ult>=fresh.saldoBancoData)){upd.saldoBanco=r.saldo;upd.saldoBancoData=ult;delete upd.saldoEm}
     if(r.saldo!=null&&!fresh.saldoData){upd.saldoInicial=r.saldo;upd.saldoData=ult;delete upd.saldoEm}
     await db.collection("contas").doc(conta.id).set(upd);
     UI.xf="pendentes";UI.xm="";UI.xb=conta.id;
@@ -2957,6 +2991,7 @@ document.addEventListener("click",ev=>{
     case "cf":UI.cf=v;render();break;
     case "ag-f":UI.af=v;render();break;
     case "verif-conta":verificarConta(id);break;
+    case "dups":ev.preventDefault();formDuplicados(v||"pagar");break;
     case "ag-mes":UI.agm=v;render();break;
     case "nova-agenda":if(!db)return;formAgenda({},v?{data:v}:{});break;
     case "edit-agenda":{const x=byId(S.agenda,id);if(x)formAgenda(x);break}
