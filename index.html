@@ -1692,15 +1692,18 @@ function inferForma(memo,v){
 }
 /* saldo do sistema: saldo inicial (data de corte) + tudo que foi pago/recebido/transferido nessa conta depois da data */
 // baixa feita depois que o saldo de partida foi gravado (ajuste manual ou importação do extrato)?
-function depoisDoSaldo(c,x){const ref=c.saldoEm||(c.ultimoExtrato&&c.ultimoExtrato.ate===c.saldoData&&c.ultimoExtrato.importadoEm)||"";
-  const ts=x.atualizadoEm||x.criadoEm||"";return !!(ref&&ts&&ts>ref)}
+// saldo digitado (Ajustar saldo): vale a hora da baixa. Saldo vindo do extrato: entra se o valor NÃO aparece no extrato daquele dia.
+function depoisDoSaldo(c,x,v){
+  if(c.saldoEm){const ts=x.atualizadoEm||x.criadoEm||"";return !!(ts&&ts>c.saldoEm)}
+  const a=Math.abs(v!=null?v:((x.valorPago??x.valor)||0));const d0=c.saldoData;
+  return !allTx().some(t=>txConta(t)===c.id&&t.d===d0&&Math.abs(t.v)===a&&!t.ref)}
 function saldoConta(c){
   const d0=c.saldoData||"0000-00-00";let s=c.saldoInicial||0;
   // no próprio dia do saldo inicial (vindo do extrato), entra só o que ainda não veio no extrato (baixa manual sem vínculo)
-  const conta=(d,x,semExtrato)=>(d||"")>d0||((d||"")===d0&&semExtrato&&depoisDoSaldo(c,x));
+  const conta=(d,x,semExtrato,v)=>(d||"")>d0||((d||"")===d0&&semExtrato&&depoisDoSaldo(c,x,v));
   for(const x of S.receber)if(x.status==="pago"&&x.contaId===c.id&&conta(x.pagoEm,x,!x.extratoKey))s+=(x.valorPago??x.valor)||0;
   for(const x of S.pagar)if(x.status==="pago"&&x.contaId===c.id&&conta(x.pagoEm,x,!x.extratoKey))s-=(x.valorPago??x.valor)||0;
-  for(const t of S.transf){if(t.de===c.id&&conta(t.data,t,!t.extratoDe))s-=t.valor||0;if(t.para===c.id&&conta(t.data,t,!t.extratoPara))s+=t.valor||0}
+  for(const t of S.transf){if(t.de===c.id&&conta(t.data,t,!t.extratoDe,t.valor))s-=t.valor||0;if(t.para===c.id&&conta(t.data,t,!t.extratoPara,t.valor))s+=t.valor||0}
   return s;
 }
 function semConta(){return S.receber.filter(x=>x.status==="pago"&&!x.contaId).length+S.pagar.filter(x=>x.status==="pago"&&!x.contaId).length}
@@ -1728,7 +1731,7 @@ function diagConta(c){
   const byUid={};for(const t of allTx())byUid[t.uid]=t;
   const per=itens.filter(it=>it.d>d0&&it.d<=dB),depois=itens.filter(it=>it.d>dB);
   // baixas manuais no próprio dia do saldo inicial (contam no saldo); procura o mesmo valor no extrato do dia
-  const mesmoDia=c.saldoBancoData===d0?itens.filter(it=>it.d===d0&&!linkTx(it)&&depoisDoSaldo(c,it.x)).map(it=>{const t=T.find(t=>t.d===d0&&t.v===it.v);return {...it,noExtrato:t||null}}):[];
+  const mesmoDia=c.saldoBancoData===d0?itens.filter(it=>it.d===d0&&!linkTx(it)).map(it=>{const t=T.find(t=>t.d===d0&&t.v===it.v);return {...it,noExtrato:t||null}}):[];
   const semExtrato=[],outroBanco=[],valorDif=[];
   for(const it of per){const u=linkTx(it);const t=u&&byUid[u];
     if(!t)semExtrato.push(it);
@@ -2029,7 +2032,7 @@ async function gravarExtrato(r,conta,arquivo){
     const fresh=byId(S.contas,conta.id)||conta;
     const upd={...strip(fresh),ofxId:conta.ofxId||fresh.ofxId,ultimoExtrato:{arquivo,importadoEm:new Date().toISOString(),ate:ult}};
     if(r.saldo!=null&&(!fresh.saldoBancoData||ult>=fresh.saldoBancoData)){upd.saldoBanco=r.saldo;upd.saldoBancoData=ult}
-    if(r.saldo!=null&&!fresh.saldoData){upd.saldoInicial=r.saldo;upd.saldoData=ult;upd.saldoEm=new Date().toISOString()}
+    if(r.saldo!=null&&!fresh.saldoData){upd.saldoInicial=r.saldo;upd.saldoData=ult;delete upd.saldoEm}
     await db.collection("contas").doc(conta.id).set(upd);
     UI.xf="pendentes";UI.xm="";UI.xb=conta.id;
     toast(`${conta.nome}: ${novos} lançamento(s) novo(s)${rep?` · ${rep} já importado(s)`:""}`);
