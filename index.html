@@ -1731,7 +1731,7 @@ function diagConta(c){
   const byUid={};for(const t of allTx())byUid[t.uid]=t;
   const per=itens.filter(it=>it.d>d0&&it.d<=dB),depois=itens.filter(it=>it.d>dB);
   // baixas manuais no próprio dia do saldo inicial (contam no saldo); procura o mesmo valor no extrato do dia
-  const mesmoDia=c.saldoBancoData===d0?itens.filter(it=>it.d===d0&&!linkTx(it)).map(it=>{const t=T.find(t=>t.d===d0&&t.v===it.v);return {...it,noExtrato:t||null}}):[];
+  const mesmoDia=c.saldoBancoData===d0?itens.filter(it=>it.d===d0&&!linkTx(it)&&depoisDoSaldo(c,it.x,it.v)).map(it=>{const t=T.find(t=>t.d===d0&&t.v===it.v);return {...it,noExtrato:t||null}}):[];
   const semExtrato=[],outroBanco=[],valorDif=[];
   for(const it of per){const u=linkTx(it);const t=u&&byUid[u];
     if(!t)semExtrato.push(it);
