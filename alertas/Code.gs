@@ -236,6 +236,7 @@ function testar() { // manda agora, só para você, o resumo da gestão (mesmo v
   console.log('Teste enviado para ' + r.join(', ') + '. Confira sua caixa de entrada.');
 }
 function instalar() { // agenda o envio diário entre 8h e 9h (horário de Brasília)
+  ScriptApp.requireAllScopes(ScriptApp.AuthMode.FULL);
   for (const t of ScriptApp.getProjectTriggers()) if (t.getHandlerFunction() === 'enviarAlertasDiario') ScriptApp.deleteTrigger(t);
   ScriptApp.newTrigger('enviarAlertasDiario').timeBased().everyDays(1).atHour(8).nearMinute(30).inTimezone('America/Sao_Paulo').create();
   console.log('Pronto: o resumo será enviado todo dia entre 8h e 9h (exceto domingo).');
@@ -389,6 +390,7 @@ function sincronizarAgendas() {
   } finally { lock.releaseLock(); }
 }
 function instalarAgenda() { // sincroniza a cada 10 minutos
+  ScriptApp.requireAllScopes(ScriptApp.AuthMode.FULL); // pede de novo qualquer permissão que tenha ficado desmarcada
   for (const t of ScriptApp.getProjectTriggers()) if (t.getHandlerFunction() === 'sincronizarAgendas') ScriptApp.deleteTrigger(t);
   ScriptApp.newTrigger('sincronizarAgendas').timeBased().everyMinutes(10).create();
   sincronizarAgendas();
