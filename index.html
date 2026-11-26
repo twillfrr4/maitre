@@ -566,6 +566,7 @@ function montarAlertas(D,hoje){
     resumo:[agL.filter(a=>a.data===hoje).length&&`${agL.filter(a=>a.data===hoje).length} compromisso(s) hoje`,agL.filter(a=>a.data===amanha).length&&`${agL.filter(a=>a.data===amanha).length} amanhã`].filter(Boolean).join(" · "),
     itens:agL.map(a=>({t:`${a.data===hoje?"Hoje":"Amanhã"}${a.inicio?" "+a.inicio:""} · ${a.titulo||""}`,s:[a.local,resp(a.responsavelId),a.status==="confirmado"?"confirmado":a.data===amanha?"confirmar com o cliente":""].filter(Boolean).join(" · ")}))});
   sec(G,agSec());
+  for(const o of (D.extras||[]))sec(G,o);   // conferências calculadas pelo sistema (saldos e duplicados)
 
   // 1. recebimentos
   const rHoje=R.filter(x=>x.vencimento===hoje),rAtr=R.filter(x=>x.vencimento&&x.vencimento<hoje).sort((a,b)=>a.vencimento.localeCompare(b.vencimento));
@@ -651,7 +652,18 @@ function montarAlertas(D,hoje){
   return {gestao:G,vendedores:V};
 }
 
-function dadosAlertas(){return {agenda:S.agenda,receber:S.receber,pagar:S.pagar,contratos:S.contratos,orcamentos:S.orcamentos,clientes:S.clientes,equipe:S.equipe,contas:S.contas,transf:S.transf,extrato:S.extrato,pedidos:S.pedidos,log:S.log,usuarios:S.usuarios,config:S.config}}
+function conferencias(){
+  const out=[];
+  const div=contasOrd().map(c=>({c,d:saldoDetalhe(c)})).filter(o=>o.d.temB&&Math.abs(o.d.diverg)>100);
+  out.push({id:"saldos",icone:"🏦",titulo:"Conferência de saldos",nivel:"alta",rota:"bancos",resumo:div.length?`${div.length} banco(s) com divergência`:"",
+    itens:div.map(o=>({t:`${o.c.nome}: ${brl(Math.abs(o.d.diverg))} pagos no sistema que não aparecem no extrato`,s:"Abra Bancos → Verificar"}))});
+  const dp=gemeos("pagar"),dr=gemeos("receber");
+  out.push({id:"duplicados",icone:"⧉",titulo:"Possíveis duplicados",nivel:"media",rota:"pagar",resumo:dp.length+dr.length?`${dp.length+dr.length} par(es) para revisar`:"",
+    itens:[...dp.map(([x,y])=>({t:`A pagar: ${x.fornecedor} · ${brl(x.valor)}`,s:`${fmtD(x.pagoEm||x.vencimento)} e ${fmtD(y.pagoEm||y.vencimento)} · A pagar → Revisar`})),
+           ...dr.map(([x,y])=>({t:`A receber: ${clienteNome(x.clienteId)||x.descricao||""} · ${brl(x.valor)}`,s:`${fmtD(x.pagoEm||x.vencimento)} e ${fmtD(y.pagoEm||y.vencimento)} · A receber → Revisar`}))]});
+  return out;
+}
+function dadosAlertas(){return {extras:ADMIN()?conferencias():[],agenda:S.agenda,receber:S.receber,pagar:S.pagar,contratos:S.contratos,orcamentos:S.orcamentos,clientes:S.clientes,equipe:S.equipe,contas:S.contas,transf:S.transf,extrato:S.extrato,pedidos:S.pedidos,log:S.log,usuarios:S.usuarios,config:S.config}}
 function quadroAvisos(){
   const A=montarAlertas(dadosAlertas(),todayISO());
   const L=ADMIN()?A.gestao:(A.vendedores[meuEquipeId()]||[]);
@@ -836,7 +848,8 @@ function vReceber(){
     <td>${pill(st)}${st!=="pago"&&x.ultimoLembrete?`<div class="s">lembrete ${fmtD((x.ultimoLembrete.em||"").slice(0,10))}${x.lembretes>1?` (${x.lembretes}×)`:""}</div>`:""}${st==="pago"?`<div class="s">${fmtD(x.pagoEm)}${quem(x.pagoPor)?" · "+quem(x.pagoPor):""}${x.comprovanteId?" · "+comprovanteLink(x):""}</div>`:""}${metaPg(x)}</td>
     <td class="r"><div class="row-act">${x.status!=="pago"&&x.status!=="cancelado"?`<button class="btn sm" data-a="lembrete" data-id="${x.id}" title="Mensagem de cobrança para WhatsApp">Lembrete</button><button class="btn sm" data-a="copiar-banco" data-id="${x.id}" title="Dados para gerar o boleto no banco">Dados p/ banco</button>${W()?`<button class="btn sm primary" data-a="pagar-rec" data-id="${x.id}">Marcar pago</button>`:""}`:""}${x.status==="pago"&&W()?`<button class="btn sm ghost" data-a="desfazer-rec" data-id="${x.id}">Desfazer</button>`:""}${W()?`<button class="btn sm ghost" data-a="edit-rec" data-id="${x.id}">Editar</button>`:""}</div></td></tr>`}).join("")}</tbody></table></div>`
    :`<div class="empty"><strong>Nenhuma parcela neste filtro</strong>As parcelas de entrada e quitação são criadas ao cadastrar um contrato. Para cobranças fora de contrato, use “Cobrança avulsa”.</div>`;
-  return `<div class="head"><div><h1>A receber</h1><p class="sub">Próximo boleto: <b class="num">${nb}</b>${W()&&ADMIN()?` · <button class="btn sm ghost" data-a="config-boleto">ajustar numeração</button>`:""}</p></div>
+  const nDupR=W()&&ADMIN()?gemeos("receber").length:0;
+  return `${nDupR?`<div class="banner">${nDupR} possível(is) lançamento(s) duplicado(s) em A receber. <a href="#" data-a="dups" data-v="receber">Revisar</a></div>`:""}<div class="head"><div><h1>A receber</h1><p class="sub">Próximo boleto: <b class="num">${nb}</b>${W()&&ADMIN()?` · <button class="btn sm ghost" data-a="config-boleto">ajustar numeração</button>`:""}</p></div>
    <div class="actions"><button class="btn" data-a="csv" data-v="receber">Exportar planilha</button>${W()?`<button class="btn primary" data-a="nova-receita">+ Cobrança avulsa</button>`:""}</div></div>
   <div class="toolbar"><div class="chips">${chipsFor("rf",UI.rf,S.receber)}</div><div class="chips">${bankFilter("rb")}<input class="search" id="rq" type="search" placeholder="Buscar cliente ou nº do boleto" value="${esc(UI.rq)}" data-q="rq"></div></div>
   <section class="panel">${body}${list.length?`<div class="panel-b" style="border-top:1px solid var(--line);display:flex;justify-content:space-between"><span class="muted">${list.length} item(ns)</span><b class="num">${brl(tot)}</b></div>`:""}</section>`;

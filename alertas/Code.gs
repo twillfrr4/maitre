@@ -85,6 +85,7 @@ function montarAlertas(D,hoje){
     resumo:[agL.filter(a=>a.data===hoje).length&&`${agL.filter(a=>a.data===hoje).length} compromisso(s) hoje`,agL.filter(a=>a.data===amanha).length&&`${agL.filter(a=>a.data===amanha).length} amanhã`].filter(Boolean).join(" · "),
     itens:agL.map(a=>({t:`${a.data===hoje?"Hoje":"Amanhã"}${a.inicio?" "+a.inicio:""} · ${a.titulo||""}`,s:[a.local,resp(a.responsavelId),a.status==="confirmado"?"confirmado":a.data===amanha?"confirmar com o cliente":""].filter(Boolean).join(" · ")}))});
   sec(G,agSec());
+  for(const o of (D.extras||[]))sec(G,o);   // conferências calculadas pelo sistema (saldos e duplicados)
 
   // 1. recebimentos
   const rHoje=R.filter(x=>x.vencimento===hoje),rAtr=R.filter(x=>x.vencimento&&x.vencimento<hoje).sort((a,b)=>a.vencimento.localeCompare(b.vencimento));
