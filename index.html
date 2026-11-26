@@ -1693,9 +1693,11 @@ function inferForma(memo,v){
 /* saldo do sistema: saldo inicial (data de corte) + tudo que foi pago/recebido/transferido nessa conta depois da data */
 function saldoConta(c){
   const d0=c.saldoData||"0000-00-00";let s=c.saldoInicial||0;
-  for(const x of S.receber)if(x.status==="pago"&&x.contaId===c.id&&(x.pagoEm||"")>d0)s+=(x.valorPago??x.valor)||0;
-  for(const x of S.pagar)if(x.status==="pago"&&x.contaId===c.id&&(x.pagoEm||"")>d0)s-=(x.valorPago??x.valor)||0;
-  for(const t of S.transf){if((t.data||"")<=d0)continue;if(t.de===c.id)s-=t.valor||0;if(t.para===c.id)s+=t.valor||0}
+  // no próprio dia do saldo inicial (vindo do extrato), entra só o que ainda não veio no extrato (baixa manual sem vínculo)
+  const conta=(d,semExtrato)=>(d||"")>d0||((d||"")===d0&&semExtrato&&c.saldoBancoData===d0);
+  for(const x of S.receber)if(x.status==="pago"&&x.contaId===c.id&&conta(x.pagoEm,!x.extratoKey))s+=(x.valorPago??x.valor)||0;
+  for(const x of S.pagar)if(x.status==="pago"&&x.contaId===c.id&&conta(x.pagoEm,!x.extratoKey))s-=(x.valorPago??x.valor)||0;
+  for(const t of S.transf){if(t.de===c.id&&conta(t.data,!t.extratoDe))s-=t.valor||0;if(t.para===c.id&&conta(t.data,!t.extratoPara))s+=t.valor||0}
   return s;
 }
 function semConta(){return S.receber.filter(x=>x.status==="pago"&&!x.contaId).length+S.pagar.filter(x=>x.status==="pago"&&!x.contaId).length}
