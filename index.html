@@ -382,7 +382,7 @@ const prioTag=p=>Number(p)===9?`<span class="prio prio-9" title="Boleto não rec
 const dgt=t=>String(t||"").replace(/\D/g,"");
 function spamLista(){return S.config.ddaSpam||[]}
 function ehSpam(nome,cnpj){const n=normF(nome);return spamLista().some(b=>(b.cnpj&&cnpj&&b.cnpj===dgt(cnpj))||(b.nome&&n&&(n===b.nome||(n.length>=12&&b.nome.startsWith(n))||(b.nome.length>=12&&n.startsWith(b.nome)))))}
-const CATS=["Alimentos","Bebidas","Equipe / freelancers","Folha e encargos","Aluguel e contas","Impostos","Marketing","Manutenção","Equipamentos","Devoluções","Tarifas, juros e multas","Empréstimos e antecipações","Outros"];
+const CATS=["Alimentos","Bebidas","Equipe / freelancers","Folha e encargos","Aluguel e contas","Impostos","Marketing","Serviços profissionais (jurídico, contábil)","Combustível e transporte","Manutenção","Equipamentos","Devoluções","Tarifas, juros e multas","Empréstimos e antecipações","Outros"];
 const NAV=[
  ["painel","Painel",'<path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 3v6h8V3z"/>'],
  ["agenda","Agenda",'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M8 14h3M8 17h6"/>'],
