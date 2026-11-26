@@ -46,6 +46,10 @@ service cloud.firestore {
     match /equipe/{id} { allow read: if membro(); allow write: if gestao(); }
     match /config/{id} { allow read: if membro(); allow write: if gestao(); }
     match /contadores/{id} { allow read: if membro(); allow write: if gestao() || (comercial() && contadorOk()); }
+    match /agendaGoogle/{e} {
+      allow read: if membro();
+      allow write: if gestao() || (membro() && e == email() && email().matches('.*@boscoeventos[.]com[.]br'));
+    }
     match /agenda/{id} {
       allow read, delete: if membro();
       allow create, update: if membro() && request.resource.data.get('titulo', '') is string && request.resource.data.get('titulo', '').size() <= 200;
@@ -64,7 +68,7 @@ service cloud.firestore {
 
     // Demais coleções (bancos, extratos, etc.): só gestão
     match /{col}/{id} {
-      allow read, write: if gestao() && !(col in ['pedidos','usuarios','equipe','config','contadores','agenda','vendas','pagar','transf','lixeira','log']);
+      allow read, write: if gestao() && !(col in ['pedidos','usuarios','equipe','config','contadores','agenda','agendaGoogle','vendas','pagar','transf','lixeira','log']);
     }
   }
 }

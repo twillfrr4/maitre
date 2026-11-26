@@ -373,7 +373,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
 "use strict";
 /* ---------- estado ---------- */
 const COLS=["clientes","contratos","receber","pagar","extrato","contas","transf","orcamentos","equipe"];
-const S={agenda:[],clientes:[],contratos:[],receber:[],pagar:[],extrato:[],contas:[],transf:[],orcamentos:[],equipe:[],vinculos:[],usuarios:[],pedidos:[],lixeira:[],log:[],fornecedores:[],perfil:null,donos:[],donosOk:new Set(),cont:{},role:"",avisoLimite:false,sel:new Set(),config:{},loaded:{},me:null,names:{},canWrite:true,dbState:"connecting",dbError:""};
+const S={agenda:[],agendaGoogle:[],clientes:[],contratos:[],receber:[],pagar:[],extrato:[],contas:[],transf:[],orcamentos:[],equipe:[],vinculos:[],usuarios:[],pedidos:[],lixeira:[],log:[],fornecedores:[],perfil:null,donos:[],donosOk:new Set(),cont:{},role:"",avisoLimite:false,sel:new Set(),config:{},loaded:{},me:null,names:{},canWrite:true,dbState:"connecting",dbError:""};
 const UI={rf:"abertos",rq:"",pf:"abertos",pq:"",cf:"proximos",cq:"",kq:"",xf:"pendentes",xt:"todas",xm:"",xq:"",xlim:150,xb:"",rb:"",pb:"",pp:"",ps:"venc",of:"abertos",oq:"",or:"",ov:"lista",op:"3m",cr:"",rp:"ano",rs:"data",rc:false,rv:"eventos",dm:"realizado",dy:0};
 let db=null,userCap=null,assetsCap=null,dlCap=null;
 
@@ -995,7 +995,27 @@ function previaDDA(L,empDet){
 const AG_TIPOS=[["degustacao","Degustação","🍽️"],["reuniao","Reunião com cliente","🤝"],["visita","Visita ao espaço","🏛️"],["tecnica","Visita técnica","📐"],["cardapio","Prova / ajuste de cardápio","👨‍🍳"],["assinatura","Assinatura de contrato","✍️"],["interna","Reunião interna","👥"],["outro","Outro","📌"]];
 const AG_ST={marcado:"Marcado",confirmado:"Confirmado",realizado:"Realizado",cancelado:"Cancelado"};
 const agTipo=k=>AG_TIPOS.find(t=>t[0]===k)||AG_TIPOS[AG_TIPOS.length-1];
-const AG=()=>(S.agenda||[]);
+const AG=()=>(S.agenda||[]).filter(a=>!a.excluido);
+const gConectados=()=>(S.agendaGoogle||[]).filter(g=>g.ativo&&g.id.endsWith("@"+DOMINIO));
+const gMeu=()=>(S.agendaGoogle||[]).find(g=>g.id===S.me)||null;
+const nomeEmail=e=>{const u=(S.usuarios||[]).find(u=>u.id===e),g=(S.agendaGoogle||[]).find(g=>g.id===e);return (u&&u.nome)||(g&&g.nome)||S.names[e]||(e||"").split("@")[0]};
+function agGoogleCard(){
+  if(!S.me||!S.me.endsWith("@"+DOMINIO))return "";
+  const g=gMeu();const on=g&&g.ativo;
+  const st=on?(g.erro?`<span style="color:var(--bad)">Não consegui ler sua agenda: ${esc(g.erro)}</span>`:g.sincEm?`Sincronizada ${new Date(g.sincEm).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})}`:"Aguardando a primeira sincronização (até 10 min)"):"Opcional: traga os compromissos da sua agenda Google para cá e mande para lá o que for marcado aqui.";
+  return `<div class="panel" style="padding:10px 14px;margin-bottom:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap"><div style="flex:1;min-width:220px"><b>Minha agenda Google</b> ${on?'<span class="pill p-pago">conectada</span>':""}<div class="s">${st}</div></div>
+   <button class="btn sm ${on?"ghost":"primary"}" data-a="ag-google">${on?"Desconectar":"Conectar minha agenda Google"}</button></div>`}
+function formAgGoogle(){
+  const g=gMeu();
+  if(g&&g.ativo){confirmBox("Desconectar sua agenda Google? Os compromissos que já vieram continuam aqui; novos deixam de ser sincronizados.","Desconectar").then(ok=>{if(ok)act(()=>db.collection("agendaGoogle").doc(S.me).set({...strip(g),ativo:false,...stamp()}),"Agenda Google desconectada")});return}
+  openDlg("Conectar minha agenda Google",`<div class="fld full"><p style="margin:0 0 8px">A sincronização roda pela conta <b>financeiro@boscoeventos.com.br</b>. Para ela poder ler e criar compromissos na sua agenda, compartilhe a sua agenda com ela uma única vez:</p>
+   <ol style="margin:0 0 8px 18px;padding:0;line-height:1.6"><li>Abra a <a href="https://calendar.google.com/calendar/u/0/r/settings" target="_blank" rel="noopener">configuração da agenda Google</a> (entre com <b>${esc(S.me)}</b>).</li>
+   <li>Na coluna da esquerda, em <b>Configurações das minhas agendas</b>, clique na agenda com o seu nome.</li>
+   <li>Em <b>Compartilhar com pessoas ou grupos específicos</b>, clique em <b>+ Adicionar pessoas e grupos</b>.</li>
+   <li>Digite <b>financeiro@boscoeventos.com.br</b>, escolha a permissão <b>Fazer alterações nos eventos</b> e clique em <b>Enviar</b>.</li></ol>
+   <p class="s" style="margin:0">Compromissos marcados como <b>particulares</b> na sua agenda não vêm para o sistema. Depois de conectar, a sincronização acontece sozinha a cada 10 minutos, nos dois sentidos.</p></div>`,
+   {submit:"Já compartilhei, conectar",onSubmit:async()=>{await write(()=>db.collection("agendaGoogle").doc(S.me).set({ativo:true,nome:S.names[S.me]||"",em:new Date().toISOString(),erro:"",...stamp()}));toast("Agenda Google conectada. A primeira sincronização acontece em até 10 minutos.")}});
+}
 const DSEM=["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 function agDiaLabel(iso){const d=new Date(iso+"T12:00:00");const t=todayISO();const rel=iso===t?"Hoje":iso===addDays(t,1)?"Amanhã":iso===addDays(t,-1)?"Ontem":"";
   return `${rel?rel+" · ":""}${DSEM[d.getDay()]}, ${fmtD(iso)}`}
@@ -1012,9 +1032,9 @@ function agWpp(a){const tel=dgt(a.telefone||"");if(tel.length<10)return "";const
 function agLinha(a){const tp=agTipo(a.tipo);const st=a.status||"marcado";const wpp=a.status!=="cancelado"&&a.status!=="realizado"&&a.data>=todayISO()?agWpp(a):"";
   return `<tr class="${st==="cancelado"?"muted":""}"><td class="num" style="white-space:nowrap">${a.inicio?esc(a.inicio)+(a.fim?"–"+esc(a.fim):""):"Dia todo"}</td>
    <td><div class="t">${tp[2]} ${esc(a.titulo||tp[1])} ${st!=="marcado"?`<span class="pill ${st==="confirmado"||st==="realizado"?"p-pago":"p-cancelado"}">${AG_ST[st]}</span>`:""}</div>
-   <div class="s">${[tp[1],a.contatoNome&&esc(a.contatoNome)+(a.telefone?" · "+esc(a.telefone):""),a.pessoas&&a.pessoas+" pessoa(s)",a.local&&esc(a.local)].filter(Boolean).join(" · ")}</div>${a.obs?`<div class="s muted">${esc(a.obs)}</div>`:""}</td>
+   <div class="s">${[a.gcalCal?`<span class="tag tr" title="Sincronizado com a agenda Google">Google · ${esc(nomeEmail(a.gcalCal))}</span>`:a.agendaDe?`<span class="tag tr">indo para a agenda Google de ${esc(nomeEmail(a.agendaDe))}</span>`:"",tp[1],a.contatoNome&&esc(a.contatoNome)+(a.telefone?" · "+esc(a.telefone):""),a.pessoas&&a.pessoas+" pessoa(s)",a.local&&esc(a.local)].filter(Boolean).join(" · ")}</div>${a.obs?`<div class="s muted">${esc(a.obs)}</div>`:""}</td>
    <td class="s">${esc(respNome(a.responsavelId)||"")}</td>
-   <td class="r"><div class="row-act">${wpp?`<a class="btn sm ghost" href="${wpp}" target="_blank" rel="noopener">Confirmar no WhatsApp</a>`:""}<a class="btn sm ghost" href="${gcalUrl(a)}" target="_blank" rel="noopener" title="Abre o compromisso já preenchido na sua agenda Google">Agenda Google</a>${W()?`<button class="btn sm" data-a="edit-agenda" data-id="${a.id}">Editar</button>`:""}</div></td></tr>`}
+   <td class="r"><div class="row-act">${wpp?`<a class="btn sm ghost" href="${wpp}" target="_blank" rel="noopener">Confirmar no WhatsApp</a>`:""}${a.gcalCal||a.agendaDe?"":`<a class="btn sm ghost" href="${gcalUrl(a)}" target="_blank" rel="noopener" title="Abre o compromisso já preenchido na sua agenda Google">Agenda Google</a>`}${W()?`<button class="btn sm" data-a="edit-agenda" data-id="${a.id}">Editar</button>`:""}</div></td></tr>`}
 function agMes(){
   const base=UI.agm||todayISO().slice(0,7);const [y,m]=base.split("-").map(Number);const ini=new Date(y,m-1,1);const off=ini.getDay();const nd=new Date(y,m,0).getDate();
   const porDia={};for(const a of AG())if(a.status!=="cancelado"&&(a.data||"").startsWith(base))(porDia[a.data]=porDia[a.data]||[]).push(a);
@@ -1044,7 +1064,7 @@ function vAgenda(){
   else{const g={};for(const a of L)(g[a.data]=g[a.data]||[]).push(a);
     body=Object.keys(g).sort((a,b)=>f==="passados"?b.localeCompare(a):a.localeCompare(b)).map(d=>`<h3 class="ag-dia${d===t?" ag-dia-hoje":""}">${agDiaLabel(d)}</h3><div class="tbl-wrap"><table><tbody>${g[d].map(agLinha).join("")}</tbody></table></div>`).join("")}
   return `<div class="head"><div><h1>Agenda</h1><p class="sub">Degustações, reuniões e visitas. Compartilhada com toda a equipe.</p></div><div class="actions">${W()?`<button class="btn primary" data-a="nova-agenda">+ Novo compromisso</button>`:""}</div></div>
-  <div class="toolbar"><div class="chips">${chips}</div><div class="chips">${tipos}<input class="search" type="search" placeholder="Buscar cliente, local, responsável" value="${esc(UI.aq||"")}" data-q="aq" id="aq"></div></div>${body}`;
+  ${agGoogleCard()}<div class="toolbar"><div class="chips">${chips}</div><div class="chips">${tipos}<input class="search" type="search" placeholder="Buscar cliente, local, responsável" value="${esc(UI.aq||"")}" data-q="aq" id="aq"></div></div>${body}`;
 }
 function formAgenda(a={},pre={}){
   const novo=!a.id;a={status:"marcado",local:"Villa Bosco",...pre,...a};
@@ -1059,9 +1079,12 @@ function formAgenda(a={},pre={}){
    F("data","Data",a.data||todayISO(),{type:"date",req:true})+F("inicio","Início",a.inicio||"",{type:"time"})+F("fim","Fim",a.fim||"",{type:"time"})+F("pessoas","Pessoas",a.pessoas||"",{type:"number",attrs:'min="0"',hint:"Quantos vêm (degustação)"})+
    F("contatoNome","Contato",a.contatoNome||"")+F("telefone","Telefone / WhatsApp",a.telefone||"",{type:"tel"})+
    F("local","Local",a.local||"")+SEL("responsavelId","Responsável",[["","—"],...S.equipe.filter(e=>e.ativo!==false).map(e=>[e.id,e.nome])],a.responsavelId||(novo?meuEquipeId()||"":""))+
+   (a.gcalCal?`<p class="fld full s" style="margin:0">Sincronizado com a agenda Google de <b>${esc(nomeEmail(a.gcalCal))}</b>. Alterações feitas aqui vão para lá em até 10 minutos.</p>`
+     :gConectados().length?SEL("agendaDe","Colocar também na agenda Google de",[["","— não colocar —"],...gConectados().map(g=>[g.id,nomeEmail(g.id)])],a.agendaDe!=null?a.agendaDe:(novo&&gConectados().some(g=>g.id===S.me)?S.me:""),{full:true}):"")+
    TA("obs","Observações",a.obs||""),
    {registro:novo?null:a,submit:novo?"Salvar compromisso":"Salvar",
-    danger:novo?null:{label:"Excluir",fn:async()=>{dlg.close();if(await confirmBox(`Excluir <b>${esc(a.titulo||"")}</b> de ${fmtD(a.data)}?`))await act(()=>db.collection("agenda").doc(a.id).delete(),"Compromisso excluído")}},
+    danger:novo?null:{label:"Excluir",fn:async()=>{dlg.close();if(await confirmBox(`Excluir <b>${esc(a.titulo||"")}</b> de ${fmtD(a.data)}?${a.gcalId?"<br>Ele também será apagado da agenda Google.":""}`))
+      await act(()=>a.gcalId?db.collection("agenda").doc(a.id).set({...strip(a),excluido:true,...stamp()}):db.collection("agenda").doc(a.id).delete(),"Compromisso excluído")}},
     onOpen:f=>{const tp=$n(f,"tipo"),ti=$n(f,"titulo"),ini=$n(f,"inicio"),fim=$n(f,"fim"),rf=$n(f,"ref");let auto=novo&&!a.titulo;
       const sug=()=>{if(!auto)return;const r=rf.value;let nome=$n(f,"contatoNome").value;
         if(r.startsWith("c:")){const c=byId(S.contratos,r.slice(2));if(c)nome=c.evento}
@@ -1082,7 +1105,8 @@ function formAgenda(a={},pre={}){
         contatoNome:g("contatoNome"),telefone:g("telefone"),local:g("local"),responsavelId:g("responsavelId"),obs:g("obs"),
         orcamentoId:r.startsWith("o:")?r.slice(2):"",contratoId:r.startsWith("c:")?r.slice(2):"",
         refLabel:ref?(r.startsWith("o:")?`Orçamento ${ref.numero||""}`:`Contrato · ${ref.evento}`):"",
-        criadoEm:a.criadoEm||new Date().toISOString(),criadoPor:a.criadoPor||S.me||null,...stamp()};
+        criadoEm:a.criadoEm||new Date().toISOString(),criadoPor:a.criadoPor||S.me||null,
+        ...(a.gcalId?{gcalId:a.gcalId,gcalCal:a.gcalCal,gcalUpd:a.gcalUpd||"",gcalSync:a.gcalSync||"",origem:a.origem||""}:{agendaDe:g("agendaDe")}),...stamp()};
       const ref2=novo?db.collection("agenda").doc():db.collection("agenda").doc(a.id);
       await write(()=>ref2.set(o));toast(novo?"Compromisso marcado":"Compromisso atualizado");
     }});
@@ -3007,6 +3031,7 @@ document.addEventListener("click",ev=>{
     case "dups":ev.preventDefault();formDuplicados(v||"pagar");break;
     case "ag-mes":UI.agm=v;render();break;
     case "nova-agenda":if(!db)return;formAgenda({},v?{data:v}:{});break;
+    case "ag-google":formAgGoogle();break;
     case "edit-agenda":{const x=byId(S.agenda,id);if(x)formAgenda(x);break}
     case "agendar-orc":{const o=byId(S.orcamentos,id);if(o){const c=byId(S.clientes,o.clienteId)||{};formAgenda({},{tipo:"degustacao",orcamentoId:o.id,contatoNome:o.contatoNome||c.nome||"",telefone:o.contatoTelefone||c.telefone||"",responsavelId:o.responsavelId||"",titulo:"Degustação · "+(o.contatoNome||c.nome||o.evento||"")})}break}
     case "agendar-ctr":{const k=byId(S.contratos,id);if(k){const c=byId(S.clientes,k.clienteId)||{};formAgenda({},{tipo:"reuniao",contratoId:k.id,contatoNome:c.nome||"",telefone:c.telefone||"",responsavelId:k.responsavelId||"",titulo:"Reunião · "+k.evento})}break}
@@ -3231,7 +3256,7 @@ auth.onAuthStateChanged(async u=>{
   S.dbState="on";render();
   const onErr=e=>{console.warn("assinatura",e&&e.code)};
   const simples=c=>db.collection(c).onSnapshot(snap=>{S[c]=snap.docs.map(d=>({...d.data(),id:d.id}));S.loaded[c]=true;if(["equipe","donos"].includes(c))atualizarPastas();agendar()},onErr);
-  simples("equipe");simples("agenda");
+  simples("equipe");simples("agenda");simples("agendaGoogle");
   db.doc("config/geral").onSnapshot(s=>{S.config=s.exists?s.data():{};agendar()},onErr);
   for(const t of ["boleto","orcamento"])db.doc("contadores/"+t).onSnapshot(s=>{S.cont[t]=s.exists?s.data():{};agendar()},onErr);
   if(S.role==="admin"){

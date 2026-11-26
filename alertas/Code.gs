@@ -245,3 +245,156 @@ function desinstalar() {
   console.log('Envio diário desligado.');
 }
 function enviarAlertasDiario() { enviarAlertas(false); }
+
+/* =====================================================================
+ * Agenda Google <-> Agenda do sistema (opcional, só contas @boscoeventos.com.br)
+ * Cada pessoa conecta pelo sistema (Agenda → "Conectar minha agenda Google") e compartilha a agenda dela com
+ * financeiro@ com a permissão "Fazer alterações nos eventos". A cada 10 minutos este script:
+ *  - traz para o sistema os compromissos da agenda Google (de 30 dias atrás até 6 meses à frente; particulares não vêm);
+ *  - leva para a agenda Google o que foi marcado no sistema com "Colocar também na agenda Google de";
+ *  - leva para lá as alterações e exclusões feitas no sistema, e traz as feitas lá.
+ * ===================================================================== */
+const DOMINIO_AG = '@boscoeventos.com.br';
+const TZ = 'America/Sao_Paulo';
+
+function req_(method, url, payload) {
+  const opt = { method: method, muteHttpExceptions: true, contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken(), 'X-Goog-User-Project': PROJETO } };
+  if (payload) opt.payload = JSON.stringify(payload);
+  const r = UrlFetchApp.fetch(url, opt);
+  if (r.getResponseCode() >= 300 && r.getResponseCode() !== 404) throw new Error('Firestore ' + r.getResponseCode() + ': ' + r.getContentText().slice(0, 300));
+  return JSON.parse(r.getContentText() || '{}');
+}
+function fsv_(v) {
+  if (v === null || v === undefined) return { nullValue: null };
+  if (typeof v === 'boolean') return { booleanValue: v };
+  if (typeof v === 'number') return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
+  if (Array.isArray(v)) return { arrayValue: { values: v.map(fsv_) } };
+  if (typeof v === 'object') { const f = {}; for (const k in v) if (v[k] !== undefined) f[k] = fsv_(v[k]); return { mapValue: { fields: f } }; }
+  return { stringValue: String(v) };
+}
+function salvarDoc_(caminho, obj) { // grava o documento inteiro
+  const f = {}; for (const k in obj) if (k !== 'id' && k !== '_o' && obj[k] !== undefined) f[k] = fsv_(obj[k]);
+  req_('patch', BASE + '/' + caminho, { fields: f });
+}
+function apagarDoc_(caminho) { req_('delete', BASE + '/' + caminho); }
+
+function tipoDe_(t) {
+  t = (t || '').toLowerCase();
+  if (/degust/.test(t)) return 'degustacao';
+  if (/visita t[eé]cnica|t[eé]cnica/.test(t)) return 'tecnica';
+  if (/visita/.test(t)) return 'visita';
+  if (/prova|card[aá]pio/.test(t)) return 'cardapio';
+  if (/assinatura|assinar/.test(t)) return 'assinatura';
+  if (/interna|equipe|alinhamento/.test(t)) return 'interna';
+  if (/reuni/.test(t)) return 'reuniao';
+  return 'outro';
+}
+function idDe_(cal, evId) {
+  const b = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, cal + '|' + evId);
+  return 'g_' + b.map(x => ((x + 256) % 256).toString(16).padStart(2, '0')).join('').slice(0, 20);
+}
+function dadosDoEvento_(ev) {
+  const ini = ev.getStartTime(), fim = ev.getEndTime(), dia = ev.isAllDayEvent();
+  return { titulo: ev.getTitle() || '(sem título)', data: Utilities.formatDate(ini, TZ, 'yyyy-MM-dd'),
+    inicio: dia ? '' : Utilities.formatDate(ini, TZ, 'HH:mm'), fim: dia ? '' : Utilities.formatDate(fim, TZ, 'HH:mm'),
+    local: ev.getLocation() || '', obs: (ev.getDescription() || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 1000) };
+}
+function aplicarNoEvento_(ev, a) {
+  ev.setTitle(a.titulo || 'Compromisso');
+  if (a.inicio) {
+    const ini = new Date(a.data + 'T' + a.inicio + ':00-03:00');
+    const fim = a.fim && a.fim > a.inicio ? new Date(a.data + 'T' + a.fim + ':00-03:00') : new Date(ini.getTime() + 3600e3);
+    ev.setTime(ini, fim);
+  } else ev.setAllDayDate(new Date(a.data + 'T12:00:00-03:00'));
+  ev.setLocation(a.local || '');
+  ev.setDescription(descricao_(a));
+}
+function descricao_(a) {
+  return [a.contatoNome && 'Contato: ' + a.contatoNome, a.telefone && 'Telefone: ' + a.telefone, a.pessoas && 'Pessoas: ' + a.pessoas, a.obs, 'Marcado no sistema Bosco · ' + SITE + '/#agenda'].filter(Boolean).join('\n');
+}
+function criarEvento_(cal, a) {
+  let ev;
+  if (a.inicio) {
+    const ini = new Date(a.data + 'T' + a.inicio + ':00-03:00');
+    const fim = a.fim && a.fim > a.inicio ? new Date(a.data + 'T' + a.fim + ':00-03:00') : new Date(ini.getTime() + 3600e3);
+    ev = cal.createEvent(a.titulo || 'Compromisso', ini, fim, { location: a.local || '', description: descricao_(a) });
+  } else ev = cal.createAllDayEvent(a.titulo || 'Compromisso', new Date(a.data + 'T12:00:00-03:00'), { location: a.local || '', description: descricao_(a) });
+  return ev;
+}
+function iso_(d) { return d ? new Date(d).toISOString() : ''; }
+
+function sincronizarAgendas() {
+  const lock = LockService.getScriptLock(); if (!lock.tryLock(5000)) return;
+  try {
+    const conectados = colecao_('agendaGoogle').filter(g => g.ativo && String(g.id).endsWith(DOMINIO_AG));
+    const usuarios = colecao_('usuarios');
+    let agenda = colecao_('agenda');
+    const agora = new Date(), de = new Date(agora.getTime() - 30 * 864e5), ate = new Date(agora.getTime() + 180 * 864e5);
+    const deIso = Utilities.formatDate(de, TZ, 'yyyy-MM-dd'), ateIso = Utilities.formatDate(ate, TZ, 'yyyy-MM-dd');
+    for (const g of conectados) {
+      const email = g.id; let erro = '';
+      try {
+        const cal = CalendarApp.getCalendarById(email);
+        if (!cal) throw new Error('a agenda ainda não foi compartilhada com financeiro@ (permissão "Fazer alterações nos eventos")');
+        const u = usuarios.find(x => x.id === email) || {};
+        const eventos = cal.getEvents(de, ate);
+        const vistos = new Set();
+        // 1) Google -> sistema (e alterações do sistema -> Google)
+        for (const ev of eventos) {
+          if (ev.getVisibility && String(ev.getVisibility()) === 'PRIVATE') continue;
+          const rec = ev.isRecurringEvent(); // repetições: uma linha por dia, só leitura
+          const evId = rec ? ev.getId() + '@' + Utilities.formatDate(ev.getStartTime(), TZ, 'yyyy-MM-dd') : ev.getId(); vistos.add(evId);
+          const docId = idDe_(email, evId);
+          const atual = agenda.find(a => a.id === docId) || agenda.find(a => a.gcalId === evId && a.gcalCal === email);
+          const upd = iso_(ev.getLastUpdated());
+          if (!atual) {
+            const d = dadosDoEvento_(ev);
+            salvarDoc_('agenda/' + docId, Object.assign({ tipo: tipoDe_(d.titulo), status: 'marcado', pessoas: 0, contatoNome: '', telefone: '', responsavelId: u.equipeId || '',
+              origem: 'google', recorrente: rec, gcalId: evId, gcalCal: email, gcalUpd: upd, gcalSync: new Date().toISOString(), criadoEm: new Date().toISOString(), criadoPor: email }, d));
+            continue;
+          }
+          if (atual.excluido) continue; // tratado abaixo
+          const mexeuAqui = (atual.atualizadoEm || '') > (atual.gcalSync || '');
+          const mexeuLa = upd > (atual.gcalUpd || '');
+          if (mexeuAqui && rec) {
+            salvarDoc_('agenda/' + atual.id, Object.assign({}, atual, { gcalSync: new Date(Date.now() + 1000).toISOString() })); // não altera a série no Google
+          } else if (mexeuAqui) {
+            aplicarNoEvento_(ev, atual);
+            const caminho = 'agenda/' + atual.id;
+            salvarDoc_(caminho, Object.assign({}, atual, { gcalUpd: iso_(ev.getLastUpdated()), gcalSync: new Date(Date.now() + 1000).toISOString() }));
+          } else if (mexeuLa) {
+            salvarDoc_('agenda/' + atual.id, Object.assign({}, atual, dadosDoEvento_(ev), { gcalUpd: upd, gcalSync: new Date(Date.now() + 1000).toISOString(), atualizadoEm: new Date().toISOString() }));
+          }
+        }
+        // 2) apagados no Google -> apaga no sistema
+        for (const a of agenda.filter(a => a.gcalCal === email && a.gcalId && !a.excluido && a.data >= deIso && a.data <= ateIso))
+          if (!vistos.has(a.gcalId)) apagarDoc_('agenda/' + a.id);
+        // 3) marcados no sistema para ir para esta agenda -> cria no Google
+        for (const a of agenda.filter(a => a.agendaDe === email && !a.gcalId && !a.excluido && a.data)) {
+          const ev = criarEvento_(cal, a);
+          salvarDoc_('agenda/' + a.id, Object.assign({}, a, { gcalId: ev.getId(), gcalCal: email, gcalUpd: iso_(ev.getLastUpdated()), gcalSync: new Date(Date.now() + 1000).toISOString() }));
+        }
+        // 4) excluídos no sistema -> apaga no Google
+        for (const a of agenda.filter(a => a.excluido && a.gcalCal === email)) {
+          if (!a.recorrente) try { const ev = cal.getEventById(a.gcalId); if (ev) ev.deleteEvent(); } catch (e) {}
+          apagarDoc_('agenda/' + a.id);
+        }
+      } catch (e) { erro = String(e && e.message || e).slice(0, 200); }
+      salvarDoc_('agendaGoogle/' + email, Object.assign({}, g, { sincEm: new Date().toISOString(), erro: erro }));
+    }
+    // excluídos no sistema que nunca foram para o Google
+    agenda = colecao_('agenda');
+    for (const a of agenda.filter(a => a.excluido && !a.gcalId)) apagarDoc_('agenda/' + a.id);
+  } finally { lock.releaseLock(); }
+}
+function instalarAgenda() { // sincroniza a cada 10 minutos
+  for (const t of ScriptApp.getProjectTriggers()) if (t.getHandlerFunction() === 'sincronizarAgendas') ScriptApp.deleteTrigger(t);
+  ScriptApp.newTrigger('sincronizarAgendas').timeBased().everyMinutes(10).create();
+  sincronizarAgendas();
+  console.log('Pronto: as agendas Google conectadas serão sincronizadas a cada 10 minutos.');
+}
+function desinstalarAgenda() {
+  for (const t of ScriptApp.getProjectTriggers()) if (t.getHandlerFunction() === 'sincronizarAgendas') ScriptApp.deleteTrigger(t);
+  console.log('Sincronização das agendas desligada.');
+}
