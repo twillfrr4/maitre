@@ -1724,6 +1724,8 @@ function diagConta(c){
   const linkTx=it=>it.col==="transf"?(it.lado==="De"?it.x.extratoDe:it.x.extratoPara):it.x.extratoKey;
   const byUid={};for(const t of allTx())byUid[t.uid]=t;
   const per=itens.filter(it=>it.d>d0&&it.d<=dB),depois=itens.filter(it=>it.d>dB);
+  // baixas manuais no próprio dia do saldo inicial (contam no saldo); procura o mesmo valor no extrato do dia
+  const mesmoDia=c.saldoBancoData===d0?itens.filter(it=>it.d===d0&&!linkTx(it)).map(it=>{const t=T.find(t=>t.d===d0&&t.v===it.v);return {...it,noExtrato:t||null}}):[];
   const semExtrato=[],outroBanco=[],valorDif=[];
   for(const it of per){const u=linkTx(it);const t=u&&byUid[u];
     if(!t)semExtrato.push(it);
@@ -1738,7 +1740,7 @@ function diagConta(c){
   for(let i=0;i<tr.length;i++)for(let j=i+1;j<tr.length;j++){const a=tr[i],b=tr[j];if(a.de===b.de&&a.para===b.para&&a.valor===b.valor&&Math.abs((new Date(a.data)-new Date(b.data))/864e5)<=3)dup.push([a,b])}
   const sistema=saldoConta(c);
   return {d0,dB,gapBanco,bancoCalc,semExtrato,outroBanco,foraDaqui,valorDif,ignorados,pendentes,depois,dup,sistema,
-    dif:c.saldoBanco!=null?sistema-c.saldoBanco:null,somaDepois:depois.reduce((s,i)=>s+i.v,0)};
+    mesmoDia,dif:c.saldoBanco!=null?sistema-c.saldoBanco:null,somaDepois:depois.reduce((s,i)=>s+i.v,0)};
 }
 function verificarConta(cid){
   const c=byId(S.contas,cid);if(!c)return;const r=diagConta(c);
@@ -1750,6 +1752,9 @@ function verificarConta(cid){
   if(r.foraDaqui.length)bloco(`${r.foraDaqui.length} baixa(s) do extrato deste banco gravada(s) em outro banco`,"O movimento saiu ou entrou nesta conta, mas o lançamento ficou com outro banco. Isso tira o valor de uma conta e põe na outra. Use Corrigir para passar todos para esta conta.",
     r.foraDaqui.map(o=>`<tr><td class="num">${fmtD(o.t.d)}</td><td>${o.col==="transf"?`Transferência ${contaNome(o.x.de)} → ${contaNome(o.x.para)}`:esc(itemNome(o.col,o.x)||"")}<div class="s">está em ${esc(contaNome(o.conta))}</div></td><td class="r">${sinal(o.t.v)}</td></tr>`),
     W()?`<button type="button" class="btn sm primary" id="vfFix" style="margin-top:8px">Corrigir: passar para ${esc(c.nome)}</button>`:"");
+  if(r.mesmoDia.length){const ja=r.mesmoDia.filter(i=>i.noExtrato);
+    bloco(`${r.mesmoDia.length} baixa(s) manual(is) em ${fmtD(r.d0)}, o mesmo dia do último extrato`,`Elas entram no saldo do sistema porque não estão ligadas a nenhum movimento do extrato. ${ja.length?`<b>${ja.length} delas têm um movimento de mesmo valor no extrato desse dia</b>: provavelmente o pagamento já estava no extrato e foi lançado de novo. Abra a Conciliação, procure o movimento e use Desfazer + Vincular a esta conta, ou exclua a conta repetida.`:"Se foram feitas depois de baixar o extrato, está certo: somem da diferença quando você importar o extrato seguinte."} Total: ${brl(r.mesmoDia.reduce((s,i)=>s+i.v,0))}.`,
+      r.mesmoDia.map(it=>`<tr><td class="num">${fmtD(it.d)}</td><td>${nomeIt(it)}<div class="s">${it.noExtrato?`<b>no extrato:</b> ${esc(it.noExtrato.memo||"")} · ${it.noExtrato.st==="pendente"||!it.noExtrato.st?"pendente":it.noExtrato.st==="ignorado"?"ignorado":"já ligado a outro lançamento"}`:"não aparece no extrato importado"}</div></td><td class="r">${sinal(it.v)}</td></tr>`))}
   if(r.semExtrato.length)bloco(`${r.semExtrato.length} lançamento(s) pago(s) neste banco sem movimento no extrato`,"Estão no período do extrato, marcados como pagos nesta conta, mas não aparecem no extrato. Podem ter sido pagos por outro banco, em outra data, ou estar duplicados. Abra cada um e confira o banco e a data.",
     r.semExtrato.map(it=>`<tr><td class="num">${fmtD(it.d)}</td><td>${nomeIt(it)}<div class="s">${it.col==="receber"?"A receber":it.col==="pagar"?"A pagar":"Transferência"}</div></td><td class="r">${sinal(it.v)}</td></tr>`));
   if(r.ignorados.length)bloco(`${r.ignorados.length} movimento(s) ignorado(s)`,"Dinheiro que entrou ou saiu do banco e não está no sistema. Só deve ficar ignorado se for algo que realmente não interessa. Transferências entre contas devem ser lançadas como transferência.",
