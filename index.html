@@ -3301,7 +3301,7 @@ auth.onAuthStateChanged(async u=>{
   gate.hidden=true;
   S.me=email;S.perfil=perfil;S.role=perfil.perfil==="gestao"?"admin":"comercial";S.names[email]=perfil.nome||u.displayName||email;
   const who=document.getElementById("who");
-  who.innerHTML=`<span id="whoFoto" class="who-foto">${avatar(perfil,56)}</span><span class="who-lbl">Conectado como</span><span id="whoNome" class="who-nome">${esc(perfil.nome||u.displayName||email)}</span><span class="who-papel">${S.role==="admin"?"Gestão":"Comercial"}</span><span class="who-links"><button class="lnk who-out" id="perfilBtn">Seus dados</button><button class="lnk who-out" id="sairBtn">Sair</button></span>`;
+  who.innerHTML=`<span id="whoFoto" class="who-foto">${avatar(perfil,56)}</span><span class="who-lbl">Conectado</span><span id="whoNome" class="who-nome">${esc(perfil.nome||u.displayName||email)}</span><span class="who-papel">${S.role==="admin"?"Gestão":"Comercial"}</span><span class="who-links"><button class="lnk who-out" id="perfilBtn">Seus dados</button><button class="lnk who-out" id="sairBtn">Sair</button></span>`;
   document.getElementById("perfilBtn").onclick=()=>formMeuPerfil();
   document.getElementById("sairBtn").onclick=()=>auth.signOut();
   try{UI.emp=localStorage.getItem("bosco.emp")||""}catch(e){}
