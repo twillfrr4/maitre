@@ -83,7 +83,15 @@ a{color:var(--accent)}
 .nav a[aria-current="page"]{background:var(--accent-soft);color:var(--accent)}
 .nav svg{width:18px;height:18px;flex:none}
 .nav .count{margin-left:auto;font-family:var(--f-mono);font-size:11px;background:var(--bad-soft);color:var(--bad);border-radius:20px;padding:1px 7px}
-.side-foot{margin-top:auto;font-size:12px;color:var(--muted)}
+.side-foot{margin-top:auto;font-size:12px;color:var(--muted);display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;padding-top:14px;border-top:1px solid var(--line)}
+#who{display:flex;flex-direction:column;align-items:center;gap:2px;width:100%}
+#who .who-foto{margin-bottom:6px}
+#who .who-lbl{font-size:11px;letter-spacing:.02em}
+#who .who-nome{font-size:14px;font-weight:600;color:var(--ink);line-height:1.25;word-break:break-word}
+#who .who-papel{font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+#who .who-links{display:flex;gap:14px;justify-content:center;margin-top:6px}
+.side-foot .tema-btn{margin-top:0}
+.side-foot .foot-links{display:flex;flex-direction:column;align-items:center;gap:4px}
 .main{min-width:0;padding-block:24px 48px;padding-left:max(16px,2.2vw);padding-right:max(16px,env(safe-area-inset-right,0px),2.2vw)}
 .head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:20px}
 h1{font-family:var(--f-display);font-weight:700;font-size:28px;letter-spacing:-.015em;margin:0;line-height:1.1;text-wrap:balance}
@@ -305,7 +313,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
 .gate-card p{color:var(--muted);margin:8px 0 18px;line-height:1.5}
 .gate-card .btn{width:100%;justify-content:center;gap:10px}
 .gate-err{color:var(--danger,#b42318);font-size:13px;margin-top:12px;min-height:1em}
-.who-out{margin-left:6px}
+.who-out{margin:0}
 [hidden]{display:none!important}
 .prio-9{background:color-mix(in srgb,var(--bad,#b42318) 14%,transparent)!important;color:var(--bad,#b42318)!important}
 .ass-box{border:1px dashed var(--line);border-radius:10px;padding:10px 12px;font-size:13.5px}.ass-box.pend{border-color:var(--warn,#c08a2b);background:color-mix(in srgb,var(--warn,#c08a2b) 8%,transparent)}.ass-box.ok{border-color:var(--ok,#2f8a5b);color:var(--ok,#2f8a5b)}
@@ -356,7 +364,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
     <div class="brand"><span class="logo" role="img" aria-label="Bosco"></span><span class="brand-n">Gestão comercial e financeira</span></div>
     <nav class="nav" id="nav"></nav>
     <button class="btn sm ghost tema-m" data-a="tema" aria-label="Escolher tema">Tema</button>
-    <div class="side-foot"><div id="who"></div><button class="tema-btn" data-a="tema" id="temaBtn"><span class="tema-dot"></span><span id="temaNome">Tema</span></button><button class="lnk" id="bkBtn" data-a="backup" hidden>Baixar backup completo</button><br><button class="lnk" id="impBtn" data-a="importar" hidden>Importar backup</button><input type="file" id="impIn" accept=".json,application/json" hidden></div>
+    <div class="side-foot"><div id="who"></div><button class="tema-btn" data-a="tema" id="temaBtn"><span class="tema-dot"></span><span id="temaNome">Tema</span></button><div class="foot-links"><button class="lnk" id="bkBtn" data-a="backup" hidden>Baixar backup completo</button><button class="lnk" id="impBtn" data-a="importar" hidden>Importar backup</button></div><input type="file" id="impIn" accept=".json,application/json" hidden></div>
   </aside>
   <main class="main" id="main"></main>
 </div>
@@ -2690,7 +2698,7 @@ async function formMeuPerfil(){
     onSubmit:async fd=>{
      const o={};for(const k of PERFIL_CAMPOS)o[k]=String(fd.get(k)||"").trim();need(o.nome,"Informe o seu nome.");o.foto=foto;
      await write(()=>db.doc("usuarios/"+S.me).set({...o,...stamp()},{merge:true}));
-     S.names[S.me]=o.nome;S.minhaFoto=o.foto;const w=document.getElementById("whoNome");if(w)w.textContent=o.nome;const wf=document.getElementById("whoFoto");if(wf)wf.innerHTML=avatar(o,22);toast("Perfil atualizado")}});
+     S.names[S.me]=o.nome;S.minhaFoto=o.foto;const w=document.getElementById("whoNome");if(w)w.textContent=o.nome;const wf=document.getElementById("whoFoto");if(wf)wf.innerHTML=avatar(o,56);toast("Perfil atualizado")}});
 }
 function sincPessoas(){ // a gestão mantém a lista de pessoas da gestão para o comercial também enxergar
   if(S.role!=="admin"||!S.usuarios)return;
@@ -3293,7 +3301,7 @@ auth.onAuthStateChanged(async u=>{
   gate.hidden=true;
   S.me=email;S.perfil=perfil;S.role=perfil.perfil==="gestao"?"admin":"comercial";S.names[email]=perfil.nome||u.displayName||email;
   const who=document.getElementById("who");
-  who.innerHTML=`<span id="whoFoto">${avatar(perfil,22)}</span> Conectado como <span id="whoNome">${esc(perfil.nome||u.displayName||email)}</span> · ${S.role==="admin"?"gestão":"comercial"} <button class="lnk who-out" id="perfilBtn">Seus dados</button> <button class="lnk who-out" id="sairBtn">Sair</button>`;
+  who.innerHTML=`<span id="whoFoto" class="who-foto">${avatar(perfil,56)}</span><span class="who-lbl">Conectado como</span><span id="whoNome" class="who-nome">${esc(perfil.nome||u.displayName||email)}</span><span class="who-papel">${S.role==="admin"?"Gestão":"Comercial"}</span><span class="who-links"><button class="lnk who-out" id="perfilBtn">Seus dados</button><button class="lnk who-out" id="sairBtn">Sair</button></span>`;
   document.getElementById("perfilBtn").onclick=()=>formMeuPerfil();
   document.getElementById("sairBtn").onclick=()=>auth.signOut();
   try{UI.emp=localStorage.getItem("bosco.emp")||""}catch(e){}
