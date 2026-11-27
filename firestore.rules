@@ -42,7 +42,15 @@ service cloud.firestore {
         && request.resource.data.get('email', '') is string && request.resource.data.get('email', '').size() <= 120;
       allow write: if gestao();
     }
-    match /usuarios/{e} { allow read: if logado() && (e == email() || gestao()); allow write: if gestao(); }
+    // Cada pessoa pode atualizar os próprios dados de contato (nunca o perfil de acesso)
+    function soMeusDados(){ return request.resource.data.diff(resource == null ? {} : resource.data).affectedKeys()
+      .hasOnly(['nome','telefone','nascimento','endereco','emergNome','emergTel','foto','atualizadoEm','atualizadoPor'])
+      && request.resource.data.get('foto', '') is string && request.resource.data.get('foto', '').size() < 60000; }
+    match /usuarios/{e} {
+      allow read: if logado() && (e == email() || gestao());
+      allow write: if gestao();
+      allow create, update: if logado() && e == email() && soMeusDados();
+    }
     match /equipe/{id} { allow read: if membro(); allow write: if gestao(); }
     match /config/{id} { allow read: if membro(); allow write: if gestao(); }
     match /contadores/{id} { allow read: if membro(); allow write: if gestao() || (comercial() && contadorOk()); }
