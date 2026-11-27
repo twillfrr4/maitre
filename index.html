@@ -537,7 +537,7 @@ async function baixarBackup(){
   const dados={sistema:"Bosco · Gestão comercial e financeira",versao:1,geradoEm:new Date().toISOString(),
     observacao:"Cada registro traz o campo _c com o caminho da coleção de origem e id com o identificador.",
     colecoes:{}};
-  for(const c of ["clientes","contratos","receber","orcamentos","pagar","contas","transf","extrato","equipe","usuarios","donos"])dados.colecoes[c]=limpo(S[c]||[]);
+  for(const c of ["clientes","contratos","receber","orcamentos","pagar","contas","transf","extrato","equipe","usuarios","donos","fornecedores","agenda"])dados.colecoes[c]=limpo(S[c]||[]);
   dados.config=S.config;dados.contadores=S.cont;
   const n=Object.values(dados.colecoes).reduce((a,b)=>a+b.length,0);
   if(!dlCap){toast("Download indisponível nesta visualização");return}
