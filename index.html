@@ -2671,7 +2671,7 @@ function pessoasAgenda(atual){
   for(const e of S.equipe.filter(e=>e.ativo!==false).sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR")))add(e.id,e.nome);
   for(const p of ((S.config||{}).pessoas||[]))add("u:"+p.email,p.nome);
   if(S.me&&S.role==="admin"&&!L.some(([id])=>id==="u:"+S.me))add("u:"+S.me,S.names[S.me]||S.me.split("@")[0]);
-  if(atual&&!L.some(([id])=>id===atual))L.push([atual,respNome(atual)||"(removido)"]);
+  if(atual&&!L.some(([id])=>id===atual)&&respNome(atual))L.push([atual,respNome(atual)]);   // responsável que saiu da lista: só aparece se ainda tiver nome
   return L}
 // ---------- Meu perfil: cada pessoa atualiza os próprios dados ----------
 const PERFIL_CAMPOS=["nome","telefone","nascimento","endereco","emergNome","emergTel"];
