@@ -1078,7 +1078,7 @@ function formAgenda(a={},pre={}){
    F("titulo","Título",a.titulo,{full:true,req:true,attrs:'placeholder="Ex.: Degustação · Ana e Pedro"'})+
    F("data","Data",a.data||todayISO(),{type:"date",req:true})+F("inicio","Início",a.inicio||"",{type:"time"})+F("fim","Fim",a.fim||"",{type:"time"})+F("pessoas","Pessoas",a.pessoas||"",{type:"number",attrs:'min="0"',hint:"Quantos vêm (degustação)"})+
    F("contatoNome","Contato",a.contatoNome||"")+F("telefone","Telefone / WhatsApp",a.telefone||"",{type:"tel"})+
-   F("local","Local",a.local||"")+SEL("responsavelId","Responsável",[["","—"],...S.equipe.filter(e=>e.ativo!==false).map(e=>[e.id,e.nome])],a.responsavelId||(novo?meuEquipeId()||"":""))+
+   F("local","Local",a.local||"")+SEL("responsavelId","Responsável",[["","—"],...pessoasAgenda(a.responsavelId)],a.responsavelId||(novo?(meuEquipeId()||(S.role==="admin"?"u:"+S.me:"")):""))+
    (a.gcalCal?`<p class="fld full s" style="margin:0">Sincronizado com a agenda Google de <b>${esc(nomeEmail(a.gcalCal))}</b>. Alterações feitas aqui vão para lá em até 10 minutos.</p>`
      :gConectados().length?SEL("agendaDe","Colocar também na agenda Google de",[["","— não colocar —"],...gConectados().map(g=>[g.id,nomeEmail(g.id)])],a.agendaDe!=null?a.agendaDe:(novo&&gConectados().some(g=>g.id===S.me)?S.me:""),{full:true}):"")+
    TA("obs","Observações",a.obs||""),
@@ -2655,7 +2655,22 @@ async function exportDRE(){
 
 /* ---------- Equipe (responsáveis) ---------- */
 function equipeOrd(todos){return S.equipe.filter(e=>todos||e.ativo!==false).sort((a,b)=>a.nome.localeCompare(b.nome,"pt-BR"))}
-function respNome(id){const e=byId(S.equipe,id);return e?e.nome:""}
+function respNome(id){if(!id)return "";if(String(id).startsWith("u:")){const em=id.slice(2);const p=((S.config||{}).pessoas||[]).find(p=>p.email===em);return (p&&p.nome)||S.names[em]||em.split("@")[0]}
+  const e=byId(S.equipe,id);return e?e.nome:""}
+// quem pode ser responsável na Agenda: vendedores (equipe) + gestão (lista mantida em config/geral, legível por todos)
+function pessoasAgenda(atual){
+  const L=[],vistos=new Set();const add=(id,nome)=>{const k=normF(nome);if(!nome||(vistos.has(k)&&id!==atual))return;vistos.add(k);L.push([id,nome])};
+  for(const e of S.equipe.filter(e=>e.ativo!==false).sort((a,b)=>(a.nome||"").localeCompare(b.nome||"","pt-BR")))add(e.id,e.nome);
+  for(const p of ((S.config||{}).pessoas||[]))add("u:"+p.email,p.nome);
+  if(S.me&&S.role==="admin"&&!L.some(([id])=>id==="u:"+S.me))add("u:"+S.me,S.names[S.me]||S.me.split("@")[0]);
+  if(atual&&!L.some(([id])=>id===atual))L.push([atual,respNome(atual)||"(removido)"]);
+  return L}
+function sincPessoas(){ // a gestão mantém a lista de pessoas da gestão para o comercial também enxergar
+  if(S.role!=="admin"||!S.usuarios)return;
+  const L=S.usuarios.filter(u=>u.perfil==="gestao"||u.id===FIN).map(u=>({email:u.id,nome:u.nome||u.id.split("@")[0]})).sort((a,b)=>a.email.localeCompare(b.email));
+  if(!L.some(p=>p.email===FIN))L.unshift({email:FIN,nome:S.names[FIN]||"Financeiro"});
+  if(JSON.stringify(L)===JSON.stringify((S.config||{}).pessoas||[]))return;
+  db.doc("config/geral").set({pessoas:L},{merge:true}).catch(()=>{})}
 function respTag(id){const n=respNome(id);return n?`<span class="resp" title="Responsável">${esc(n.split(" ")[0])}</span>`:""}
 const RESP_SEL=(name,label,val,{full=false,vazio="—"}={})=>!ADMIN()?`<div class="fld${full?" full":""}"><label>${label.replace(" *","")}</label><input type="hidden" name="${name}" value="${esc(val||meuEquipeId())}"><span class="ro">${esc(respNome(val||meuEquipeId())||"Você")}</span></div>`:SEL(name,label,[["",vazio],...equipeOrd().map(e=>[e.id,e.nome+(e.funcao?" · "+e.funcao:"")])],val||"",{full});
 const PERFIL_N={gestao:"Gestão",comercial:"Comercial"};
@@ -3264,7 +3279,7 @@ auth.onAuthStateChanged(async u=>{
     db.collection("lixeira").onSnapshot(snap=>{S.lixeira=snap.docs.map(d=>({...d.data(),id:d.id}));agendar()},onErr);
     db.collection("log").orderBy("em","desc").limit(300).onSnapshot(snap=>{S.log=snap.docs.map(d=>({...d.data(),id:d.id}));agendar()},onErr);
     db.collection("pedidos").onSnapshot(snap=>{S.pedidos=snap.docs.map(d=>({...d.data(),id:d.id}));agendar();const l=document.getElementById("eqList");if(l&&l._redraw)l._redraw()},onErr);
-    db.collection("usuarios").onSnapshot(snap=>{S.usuarios=snap.docs.map(d=>({...d.data(),id:d.id}));for(const x of S.usuarios)if(x.nome)S.names[x.id]=x.nome;agendar()},onErr);
+    db.collection("usuarios").onSnapshot(snap=>{S.usuarios=snap.docs.map(d=>({...d.data(),id:d.id}));for(const x of S.usuarios)if(x.nome)S.names[x.id]=x.nome;setTimeout(sincPessoas,1500);agendar()},onErr);
     for(const c of PRIV)db.collection(c).onSnapshot(snap=>{(PARTS[c]=PARTS[c]||{})._legado=snap.docs.map(d=>({...d.data(),id:d.id,_c:c,_o:"_legado"}));juntar(c);S.loaded[c]=true;agendar()},onErr);
     atualizarPastas();
   }else{
