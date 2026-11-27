@@ -2678,23 +2678,48 @@ const PERFIL_CAMPOS=["nome","telefone","nascimento","endereco","emergNome","emer
 const avatar=(u,px=28)=>u&&u.foto?`<img src="${esc(u.foto)}" alt="" style="width:${px}px;height:${px}px;border-radius:50%;object-fit:cover;vertical-align:middle;flex:none">`
   :`<span aria-hidden="true" style="display:inline-grid;place-items:center;width:${px}px;height:${px}px;border-radius:50%;background:var(--accent-soft);color:var(--ink);font-size:${Math.round(px*.42)}px;font-weight:600;vertical-align:middle;flex:none">${esc(((u&&u.nome)||"?").trim().charAt(0).toUpperCase())}</span>`;
 // reduz a foto para 192×192 (recorte quadrado no centro), ~15 KB, guardada no próprio cadastro
+function lerImagem(file){return new Promise((ok,erro)=>{const r=new FileReader();r.onerror=()=>erro(new Error("Não consegui ler a imagem."));
+  r.onload=()=>{const im=new Image();im.onerror=()=>erro(new Error("Esse arquivo não é uma imagem válida."));im.onload=()=>ok(im);im.src=r.result};r.readAsDataURL(file)})}
+// editor de recorte: arrastar para posicionar, controle para aproximar
+function recorteFoto(box,im,onChange){
+  const V=200,c=document.createElement("canvas");c.width=c.height=V;c.style.cssText="width:200px;height:200px;border-radius:50%;cursor:grab;touch-action:none;background:var(--sunk);display:block";
+  const base=Math.max(V/im.width,V/im.height);let z=1,x=0,y=0;
+  const lim=()=>{const w=im.width*base*z,h=im.height*base*z;x=Math.min(0,Math.max(V-w,x));y=Math.min(0,Math.max(V-h,y))};
+  const centro=()=>{x=(V-im.width*base*z)/2;y=(V-im.height*base*z)/2};
+  const desenha=()=>{const g=c.getContext("2d");g.clearRect(0,0,V,V);g.drawImage(im,x,y,im.width*base*z,im.height*base*z)};
+  const saida=()=>{const L=192,o=document.createElement("canvas");o.width=o.height=L;const k=L/V;o.getContext("2d").drawImage(im,x*k,y*k,im.width*base*z*k,im.height*base*z*k);return o.toDataURL("image/jpeg",0.82)};
+  const muda=()=>{lim();desenha();onChange(saida())};
+  centro();
+  const zoom=document.createElement("input");zoom.type="range";zoom.min="1";zoom.max="4";zoom.step="0.01";zoom.value="1";zoom.setAttribute("aria-label","Aproximar");zoom.style.width="200px";
+  zoom.oninput=()=>{const nz=Number(zoom.value);const cx=(V/2-x)/z,cy=(V/2-y)/z;z=nz;x=V/2-cx*z;y=V/2-cy*z;muda()};
+  let arr=null;c.addEventListener("pointerdown",e=>{arr={px:e.clientX,py:e.clientY,x,y};c.setPointerCapture(e.pointerId);c.style.cursor="grabbing"});
+  c.addEventListener("pointermove",e=>{if(!arr)return;x=arr.x+(e.clientX-arr.px);y=arr.y+(e.clientY-arr.py);muda()});
+  const solta=()=>{arr=null;c.style.cursor="grab"};c.addEventListener("pointerup",solta);c.addEventListener("pointercancel",solta);
+  c.addEventListener("wheel",e=>{e.preventDefault();zoom.value=String(Math.min(4,Math.max(1,Number(zoom.value)-e.deltaY*0.002)));zoom.oninput()},{passive:false});
+  box.innerHTML="";const dica=document.createElement("div");dica.className="s";dica.textContent="Arraste a foto para posicionar e use a barra para aproximar.";
+  const lin=document.createElement("div");lin.style.cssText="display:flex;align-items:center;gap:8px;font-size:12px";lin.append("−",zoom,"+");
+  box.append(c,lin,dica);muda();
+}
 function fotoPequena(file){return new Promise((ok,erro)=>{const r=new FileReader();r.onerror=()=>erro(new Error("Não consegui ler a imagem."));
   r.onload=()=>{const im=new Image();im.onerror=()=>erro(new Error("Esse arquivo não é uma imagem válida."));im.onload=()=>{const L=192,c=document.createElement("canvas");c.width=c.height=L;
     const m=Math.min(im.width,im.height);c.getContext("2d").drawImage(im,(im.width-m)/2,(im.height-m)/2,m,m,0,0,L,L);ok(c.toDataURL("image/jpeg",0.82))};im.src=r.result};r.readAsDataURL(file)})}
 async function formMeuPerfil(){
   let u={};try{const d=await db.doc("usuarios/"+S.me).get();u=d.exists?d.data():{}}catch(e){}
   let foto=u.foto||"";
-  openDlg("Seus dados",`<div class="fld full" style="display:flex;align-items:center;gap:14px"><span id="mpFoto">${avatar({...u,nome:u.nome||S.names[S.me]},72)}</span>
+  openDlg("Seus dados",`<div class="fld full" id="mpEd" hidden style="display:flex;flex-direction:column;align-items:center;gap:8px"></div><div class="fld full" id="mpLinha" style="display:flex;align-items:center;gap:14px"><span id="mpFoto">${avatar({...u,nome:u.nome||S.names[S.me]},72)}</span>
      <div><label class="btn sm" style="cursor:pointer">Escolher foto<input type="file" id="mpArq" accept="image/*" hidden></label> <button type="button" class="btn sm ghost" id="mpTira"${foto?"":" hidden"}>Remover foto</button>
      <div class="s" style="margin-top:4px">A foto é reduzida automaticamente.</div></div></div>
-   <p class="fld full s" style="margin:0">Conta de acesso: <b>${esc(S.me)}</b>. Esses dados ficam visíveis só para a gestão.</p>`+
+   <p class="fld full s" style="margin:0"><span>Conta de acesso: <b>${esc(S.me)}</b>. Esses dados ficam visíveis só para a gestão.</span></p>`+
    F("nome","Nome",u.nome||S.names[S.me]||"",{full:true,req:true,hint:"É o nome que aparece no sistema (responsável, agenda, registro de alterações)."})+
    F("telefone","Telefone / WhatsApp",u.telefone||"",{type:"tel"})+F("nascimento","Data de nascimento",u.nascimento||"",{type:"date"})+
    TA("endereco","Endereço",u.endereco||"")+
    F("emergNome","Contato de emergência",u.emergNome||"",{attrs:'placeholder="Nome e parentesco, ex.: Ana (esposa)"'})+F("emergTel","Telefone de emergência",u.emergTel||"",{type:"tel"}),
    {submit:"Salvar",onOpen:f=>{const pv=()=>{f.querySelector("#mpFoto").innerHTML=avatar({foto,nome:$n(f,"nome").value},72);f.querySelector("#mpTira").hidden=!foto};
-      f.querySelector("#mpArq").addEventListener("change",async e=>{const a=e.target.files[0];if(!a)return;try{foto=await fotoPequena(a);pv()}catch(err){toast(err.message)}});
-      f.querySelector("#mpTira").onclick=()=>{foto="";pv()}},
+      const ed=f.querySelector("#mpEd");
+      f.querySelector("#mpArq").addEventListener("change",async e=>{const a=e.target.files[0];if(!a)return;
+        try{const im=await lerImagem(a);ed.hidden=false;ed.style.display="flex";f.querySelector("#mpFoto").hidden=true;
+          recorteFoto(ed,im,d=>{foto=d;f.querySelector("#mpTira").hidden=false})}catch(err){toast(err.message)}});
+      f.querySelector("#mpTira").onclick=()=>{foto="";ed.hidden=true;ed.style.display="none";ed.innerHTML="";f.querySelector("#mpFoto").hidden=false;pv()}},
     onSubmit:async fd=>{
      const o={};for(const k of PERFIL_CAMPOS)o[k]=String(fd.get(k)||"").trim();need(o.nome,"Informe o seu nome.");o.foto=foto;
      await write(()=>db.doc("usuarios/"+S.me).set({...o,...stamp()},{merge:true}));
