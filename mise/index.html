@@ -110,6 +110,7 @@ input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
 .badge.bad{background:#fbe3e0;color:var(--bad)}.badge.warn{background:#fdf0d8;color:var(--warn)}
 .qty{font-size:20px;font-weight:700;white-space:nowrap;text-align:right}
 .qty small{font-size:13px;font-weight:500;color:var(--muted)}
+.man{max-width:820px;margin:0 auto}.man h2{margin-top:0}.man h3{font-size:15px;margin:18px 0 6px}.man ol,.man ul{margin:6px 0 0;padding-left:22px;line-height:1.55}.man p{line-height:1.55;margin:8px 0}.man a{color:var(--accent);font-weight:600}.man .toc{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}.man .toc a{border:1px solid var(--line);border-radius:999px;padding:6px 12px;text-decoration:none;color:var(--ink);font-weight:500;font-size:14px}
 .mv-in{color:var(--ok)}.mv-out{color:var(--bad)}.mv-adj{color:var(--warn)}
 #gate{position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px}
 #gate .gbox{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:28px 24px;max-width:420px;width:100%;text-align:center}
@@ -146,6 +147,7 @@ input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
     <button data-tab="estoque">Estoque</button>
     <button data-tab="produtos">Preparos</button>
     <button data-tab="config">Configurações</button>
+    <button data-tab="manual">Manual</button>
   </nav>
 </header>
 
@@ -412,6 +414,83 @@ input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
     </div>
   </div>
 </section>
+<!-- MANUAL -->
+<section class="tab" id="tab-manual"><div class="man">
+  <div class="card">
+    <h2>Manual do Mise</h2>
+    <p class="muted" style="margin-top:0">Estoque e etiquetas da cozinha da Bosco. Endereço: <b>maitre.boscoeventos.com.br/mise/</b></p>
+    <div class="toc"><a href="#m-imp">Instalar a impressora</a><a href="#m-acesso">Acesso</a><a href="#m-prep">Preparos</a><a href="#m-etq">Etiquetar</a><a href="#m-val">Validades</a><a href="#m-est">Estoque</a><a href="#m-prob">Problemas</a></div>
+  </div>
+  <div class="card" id="m-imp">
+    <h2>Instalar a impressora em um computador</h2>
+    <p>Impressora: <b>Zebra ZD220t</b>, ligada no USB. Etiqueta de <b>60 × 40 mm</b>. Faça isto uma vez em cada computador que vai imprimir.</p>
+    <ol>
+      <li><b>Driver da impressora:</b> abra a <a href="https://www.zebra.com/ap/en/support-downloads/printers/desktop/ZD200t.html" target="_blank" rel="noopener">página de suporte da ZD220t</a>, aba <b>Downloads</b>, e baixe o <b>Windows Printer Driver</b> (ZDesigner). Instale e ligue a impressora no USB quando ele pedir.</li>
+      <li><b>Zebra Browser Print:</b> abra a <a href="https://www.zebra.com/us/en/support-downloads/software/printer-software/browser-print.html" target="_blank" rel="noopener">página do Browser Print</a> e clique em <b>Download Browser Print For Windows PC</b>. A Zebra pede um formulário curto (nome e e-mail) antes de liberar o arquivo. Instale e abra o programa.</li>
+      <li>No ícone do Browser Print, perto do relógio do Windows, clique com o botão direito → <b>Settings</b> e escolha a <b>ZD220t</b> como impressora padrão.</li>
+      <li>Abra o Mise, entre com a conta Google e vá em <b>Configurações</b>. Confira <b>60 × 40</b> e <b>Zebra Browser Print</b>.</li>
+      <li>Clique em <b>Testar conexão</b>. Na janela do Browser Print que pergunta se aceita o site, clique em <b>Sim</b>.</li>
+      <li>Clique em <b>Imprimir teste</b>.</li>
+    </ol>
+    <p class="muted">Instalar programas pode pedir a senha de administrador do computador.</p>
+  </div>
+  <div class="card" id="m-acesso">
+    <h2>Acesso</h2>
+    <ul>
+      <li>Cada pessoa entra com a própria conta Google e clica em <b>Pedir acesso</b>.</li>
+      <li>O financeiro aprova no sistema de gestão, em <b>Orçamentos → Equipe</b>, com o perfil <b>Cozinha</b>. O Mise abre sozinho depois da aprovação.</li>
+      <li>O perfil Cozinha vê só o Mise. Nada do financeiro.</li>
+      <li>Em computador compartilhado, use <b>Configurações → Sair</b> ao terminar, ou deixe logada uma conta da cozinha.</li>
+    </ul>
+  </div>
+  <div class="card" id="m-prep">
+    <h2>Preparos</h2>
+    <p>Preparo é tudo que recebe etiqueta de validade: molhos, carnes porcionadas, bases, sobremesas, produtos abertos.</p>
+    <ol>
+      <li>Aba <b>Preparos</b> → digite o <b>nome</b>. Categoria e <b>alergênicos</b> são opcionais; os alergênicos saem impressos na etiqueta.</li>
+      <li>Marque cada armazenamento possível (<b>Refrigerado</b>, <b>Congelado</b>, <b>Ambiente</b>) e informe o prazo em dias ou horas.</li>
+      <li>Clique em <b>Salvar produto</b>. Para alterar, clique no preparo na lista.</li>
+    </ol>
+    <p class="muted">Os prazos são definidos pela cozinha, seguindo as regras da nutricionista e da Vigilância Sanitária.</p>
+  </div>
+  <div class="card" id="m-etq">
+    <h2>Etiquetar</h2>
+    <ol>
+      <li>Aba <b>Etiquetar</b> → escolha o <b>Produto</b> e o <b>Armazenamento</b>.</li>
+      <li>Confira a hora em <b>Manipulado / aberto em</b> (o botão <b>Agora</b> coloca a hora atual). A <b>Validade</b> é calculada sozinha e pode ser ajustada.</li>
+      <li>Preencha o <b>Responsável</b> e, se for para um evento, o <b>Evento</b>.</li>
+      <li>Escolha a quantidade e clique em <b>Imprimir</b>. Cada impressão gera um <b>lote</b> com QR code e fica registrada em Validades.</li>
+    </ol>
+  </div>
+  <div class="card" id="m-val">
+    <h2>Validades</h2>
+    <ul>
+      <li>Mostra as etiquetas <b>Ativas</b>, as <b>Vencendo</b> e as <b>Vencidas</b>. O número vermelho na aba avisa quantas precisam de atenção.</li>
+      <li>Quando o preparo acabar, clique em <b>Usado</b>. Se for jogado fora, clique em <b>Descartar</b>.</li>
+      <li>Na busca, digite o produto, o lote ou o evento, ou leia o QR code da etiqueta com um leitor.</li>
+    </ul>
+  </div>
+  <div class="card" id="m-est">
+    <h2>Estoque</h2>
+    <ul>
+      <li><b>Itens:</b> cadastre os itens (alimentos, bebidas, limpeza) um a um, ou clique em <b>Importar planilha de estoque (.xlsx)</b>. A planilha precisa das colunas <b>Item</b>, <b>Categoria</b>, <b>Unidade</b> e <b>Quantidade atual</b>; também aceita Embalagem, Local, Estoque mínimo, Custo, Fornecedor e Observação.</li>
+      <li><b>+ Entrada:</b> registre cada compra que chega, com quantidade e custo.</li>
+      <li><b>Saldo:</b> mostra quanto tem de cada item e avisa o que está abaixo do mínimo.</li>
+      <li><b>Contagem:</b> importe a planilha de novo com a <b>Quantidade atual</b> contada. O sistema ajusta a diferença e registra no histórico.</li>
+      <li><b>Histórico:</b> todas as entradas e ajustes, com quem lançou.</li>
+    </ul>
+  </div>
+  <div class="card" id="m-prob">
+    <h2>Problemas comuns</h2>
+    <ul>
+      <li><b>Não imprime:</b> confira se o Browser Print está aberto (ícone perto do relógio) e a impressora ligada no USB. Vá em Configurações → <b>Testar conexão</b>.</li>
+      <li><b>Etiqueta cortada ou torta:</b> confira 60 × 40 em Configurações e ajuste a <b>Escuridão</b> se a impressão sair clara.</li>
+      <li><b>Selo amarelo "Sem internet":</b> pode continuar usando. Tudo é enviado quando a conexão voltar.</li>
+      <li><b>Selo vermelho "Erro ao salvar":</b> o acesso pode ter sido alterado. Fale com o financeiro.</li>
+      <li><b>Dúvidas:</b> financeiro@boscoeventos.com.br</li>
+    </ul>
+  </div>
+</div></section>
 </main>
 
 <div id="printArea"></div>
