@@ -3,7 +3,7 @@ service firebase.storage {
   match /b/{bucket}/o {
     function logado(){ return request.auth != null && request.auth.token.email_verified == true; }
     function email(){ return request.auth.token.email; }
-    function membro(){ return logado() && (email() == 'financeiro@boscoeventos.com.br' || firestore.exists(/databases/(default)/documents/usuarios/$(email()))); }
+    function membro(){ return logado() && (email() == 'financeiro@boscoeventos.com.br' || (firestore.exists(/databases/(default)/documents/usuarios/$(email())) && firestore.get(/databases/(default)/documents/usuarios/$(email())).data.get('perfil', '') in ['gestao', 'comercial'])); }
 
     match /anexos/{ano}/{arquivo} {
       allow read: if membro();

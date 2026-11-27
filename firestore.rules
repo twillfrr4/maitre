@@ -8,6 +8,8 @@ service cloud.firestore {
     function gestao(){ return logado() && (email() == 'financeiro@boscoeventos.com.br' || (temPerfil() && perfil().perfil == 'gestao')); }
     function comercial(){ return logado() && temPerfil() && perfil().perfil == 'comercial'; }
     function membro(){ return gestao() || comercial(); }
+    function cozinha(){ return logado() && temPerfil() && perfil().perfil == 'cozinha'; }
+    function mise(col){ return col in ['mise_produtos','mise_etiquetas','mise_pessoas','mise_itens','mise_movimentos']; }
     function minhaPasta(pasta){ return comercial() && pasta == 'eq-' + perfil().equipeId; }
 
     // Fechamento do mês: lançamentos pagos (ou transferências) até o mês fechado ficam travados
@@ -83,8 +85,10 @@ service cloud.firestore {
     match /log/{id} { allow create: if membro() && request.resource.data.por == email(); allow read: if gestao(); }
 
     // Demais coleções (bancos, extratos, etc.): só gestão
+    // Mise (estoque e etiquetas da cozinha): gestão e perfil Cozinha; a Cozinha não acessa nada do financeiro
     match /{col}/{id} {
-      allow read, write: if gestao() && !(col in ['pedidos','usuarios','equipe','config','contadores','agenda','agendaGoogle','vendas','pagar','transf','lixeira','log']);
+      allow read, write: if (gestao() && !(col in ['pedidos','usuarios','equipe','config','contadores','agenda','agendaGoogle','vendas','pagar','transf','lixeira','log']))
+        || (mise(col) && cozinha() && (request.resource == null || request.resource.data.size() <= 40));
     }
   }
 }

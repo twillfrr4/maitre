@@ -2795,7 +2795,7 @@ function sincPessoas(){ // a gestão mantém a lista de pessoas da gestão para 
   db.doc("config/geral").set({pessoas:L},{merge:true}).catch(()=>{})}
 function respTag(id){const n=respNome(id);return n?`<span class="resp" title="Responsável">${esc(n.split(" ")[0])}</span>`:""}
 const RESP_SEL=(name,label,val,{full=false,vazio="—"}={})=>!ADMIN()?`<div class="fld${full?" full":""}"><label>${label.replace(" *","")}</label><input type="hidden" name="${name}" value="${esc(val||meuEquipeId())}"><span class="ro">${esc(respNome(val||meuEquipeId())||"Você")}</span></div>`:SEL(name,label,[["",vazio],...equipeOrd().map(e=>[e.id,e.nome+(e.funcao?" · "+e.funcao:"")])],val||"",{full});
-const PERFIL_N={gestao:"Gestão",comercial:"Comercial"};
+const PERFIL_N={gestao:"Gestão",comercial:"Comercial",cozinha:"Cozinha (Mise)"};
 function contatoUsu(u){if(!u)return "";const p=[u.telefone&&"📞 "+esc(u.telefone),u.emergNome&&"🆘 "+esc(u.emergNome)+(u.emergTel?" "+esc(u.emergTel):"")].filter(Boolean);return p.length?" · "+p.join(" · "):""}
 function formEquipe(){
   const dom="@boscoeventos.com.br";
@@ -2805,23 +2805,23 @@ function formEquipe(){
       return `<div class="eq-row"><span>${u?avatar(u,26)+" ":""}<b>${esc(e.nome)}</b>${e.funcao?` <span class="muted">· ${esc(e.funcao)}</span>`:""}${e.ativo===false?` <span class="muted">(inativo)</span>`:""}
        <span class="s" style="display:block">${u?`${esc(u.id)} · ${PERFIL_N[u.perfil]||u.perfil}${contatoUsu(u)}`:"sem acesso ao sistema"}${n?` · ${n} registro(s)`:""}</span></span>
        <span class="row-act">${u?`<select class="btn sm" data-acperf="${esc(u.id)}" aria-label="Perfil de ${esc(e.nome)}" title="Mudar o perfil"><option value="comercial" ${u.perfil==="comercial"?"selected":""}>Comercial</option><option value="gestao" ${u.perfil==="gestao"?"selected":""}>Gestão</option></select><button type="button" class="btn sm ghost" data-acdel="${esc(u.id)}">Tirar acesso</button>`:""}${!u&&!n?`<button type="button" class="btn sm ghost" data-eqdel="${e.id}">Excluir</button>`:""}<button type="button" class="btn sm ghost" data-eq="${e.id}">${e.ativo===false?"Reativar":"Desativar"}</button></span></div>`}).join("");
-    const ges=S.usuarios.filter(u=>!u.equipeId).sort((a,b)=>a.id.localeCompare(b.id)).map(u=>`<div class="eq-row"><span>${avatar(u,26)} <b>${esc(u.nome||u.id)}</b> <span class="muted">· Gestão</span><span class="s" style="display:block">${esc(u.id)}${contatoUsu(u)}</span></span><span class="row-act"><button type="button" class="btn sm ghost" data-acdel="${esc(u.id)}">Tirar acesso</button></span></div>`).join("");
+    const ges=S.usuarios.filter(u=>!u.equipeId).sort((a,b)=>a.id.localeCompare(b.id)).map(u=>`<div class="eq-row"><span>${avatar(u,26)} <b>${esc(u.nome||u.id)}</b> <span class="muted">· ${esc(PERFIL_N[u.perfil]||u.perfil)}</span><span class="s" style="display:block">${esc(u.id)}${contatoUsu(u)}</span></span><span class="row-act"><button type="button" class="btn sm ghost" data-acdel="${esc(u.id)}">Tirar acesso</button></span></div>`).join("");
     const pend=S.pedidos.filter(p=>p.status==="pendente").sort((a,b)=>(a.em||"").localeCompare(b.em||""));
     const livres=equipeOrd().filter(e=>!acessoDe(e.id));
     const ped=pend.map(p=>`<div class="ped-row" data-ped="${esc(p.id)}"><span><b>${esc(p.nome||p.id)}</b>${p.funcao?` <span class="muted">· ${esc(p.funcao)}</span>`:""}<span class="s" style="display:block">${esc(p.id)}${p.telefone?` · ${esc(p.telefone)}`:""} · pediu em ${esc(fmtD((p.em||"").slice(0,10)))}</span></span>
-       <span class="ped-op"><select data-k="perfil" aria-label="Perfil"><option value="comercial">Comercial (vê só o que é dele)</option><option value="gestao">Gestão (vê tudo)</option><option value="gestao-so">Gestão, sem carteira de vendas</option></select>
+       <span class="ped-op"><select data-k="perfil" aria-label="Perfil"><option value="comercial">Comercial (vê só o que é dele)</option><option value="gestao">Gestão (vê tudo)</option><option value="gestao-so">Gestão, sem carteira de vendas</option><option value="cozinha" ${/cozinha|mise/i.test(p.funcao||"")?"selected":""}>Cozinha (só o Mise)</option></select>
        <select data-k="vinc" aria-label="Pessoa da equipe"><option value="">Cadastrar como pessoa nova</option>${livres.map(e=>`<option value="${e.id}">É o(a) ${esc(e.nome)}</option>`).join("")}</select>
        <button type="button" class="btn sm primary" data-aprova="${esc(p.id)}">Aprovar</button><button type="button" class="btn sm ghost" data-recusa="${esc(p.id)}">Recusar</button></span></div>`).join("");
-    return `${pend.length?`<span class="lbl-like">Pedidos de acesso (${pend.length})</span>${ped}<div style="height:12px"></div>`:""}<span class="lbl-like">Equipe comercial</span>${eq||`<span class="muted">Ninguém cadastrado ainda.</span>`}${ges?`<span class="lbl-like" style="margin-top:12px;display:block">Gestão (sem carteira de vendas)</span>${ges}`:""}<p class="muted s" style="margin-top:8px">financeiro${dom} sempre tem acesso de gestão.</p>`;
+    return `${pend.length?`<span class="lbl-like">Pedidos de acesso (${pend.length})</span>${ped}<div style="height:12px"></div>`:""}<span class="lbl-like">Equipe comercial</span>${eq||`<span class="muted">Ninguém cadastrado ainda.</span>`}${ges?`<span class="lbl-like" style="margin-top:12px;display:block">Gestão (sem carteira de vendas) e cozinha</span>${ges}`:""}<p class="muted s" style="margin-top:8px">financeiro${dom} sempre tem acesso de gestão.</p>`;
   };
   const semAcesso=equipeOrd().filter(e=>!acessoDe(e.id));
   openDlg("Equipe e acessos",`<div class="fld full eq-list" id="eqList">${lista()}</div>`
     +SEL("quem","Dar acesso para",[["","+ Pessoa nova"],...semAcesso.map(e=>[e.id,e.nome])],"",{full:true})
     +F("nome","Nome","",{attrs:'placeholder="Nome e sobrenome"'})+F("funcao","Função","",{attrs:'placeholder="Ex.: Vendas, Gerente"'})
     +F("email","E-mail de acesso","",{type:"email",attrs:`placeholder="nome${dom} ou nome@gmail.com"`,hint:"Conta Google da pessoa (Bosco ou Gmail). Deixe em branco para só cadastrar o nome como responsável."})
-    +SEL("perfil","Perfil",[["comercial","Comercial · vê só os próprios orçamentos, contratos e clientes"],["gestao","Gestão · vê tudo"],["gestao-so","Gestão, sem carteira de vendas (não aparece como responsável)"]],"comercial",{full:true}),
+    +SEL("perfil","Perfil",[["comercial","Comercial · vê só os próprios orçamentos, contratos e clientes"],["gestao","Gestão · vê tudo"],["gestao-so","Gestão, sem carteira de vendas (não aparece como responsável)"],["cozinha","Cozinha · só o Mise (estoque e etiquetas), nada do financeiro"]],"comercial",{full:true}),
    {submit:"Salvar",onOpen:f=>{
-      const q=$n(f,"quem");const sync=()=>{const nova=!q.value;for(const k of ["nome","funcao"])$n(f,k).closest(".fld").style.display=(!nova||($n(f,"perfil").value==="gestao-so"&&k==="funcao"))?"none":""};
+      const q=$n(f,"quem");const sync=()=>{const nova=!q.value;const pf=$n(f,"perfil").value;for(const k of ["nome","funcao"])$n(f,k).closest(".fld").style.display=(!nova||((pf==="gestao-so"||pf==="cozinha")&&k==="funcao"))?"none":""};
       q.addEventListener("change",sync);$n(f,"perfil").addEventListener("change",sync);sync();
       const lst=f.querySelector("#eqList");lst._redraw=()=>{lst.innerHTML=lista()};
       lst.addEventListener("change",async ev=>{const sel=ev.target.closest("[data-acperf]");if(!sel)return;const em=sel.dataset.acperf;const u=S.usuarios.find(x=>x.id===em);if(!u)return;
@@ -2837,7 +2837,7 @@ function formEquipe(){
           need(!S.usuarios.some(u=>u.id===em),"Esse e-mail já tem acesso.");
           const perfil=row.querySelector('[data-k="perfil"]').value,vinc=row.querySelector('[data-k="vinc"]').value;
           const nome=p.nome||em.split("@")[0];const base={criadoEm:new Date().toISOString(),criadoPor:S.me,telefone:p.telefone||""};
-          if(perfil==="gestao-so")await write(()=>db.doc("usuarios/"+em).set({...base,nome,perfil:"gestao",equipeId:""}));
+          if(perfil==="gestao-so"||perfil==="cozinha")await write(()=>db.doc("usuarios/"+em).set({...base,nome,perfil:perfil==="cozinha"?"cozinha":"gestao",equipeId:""}));
           else{let eid=vinc,nm=nome;
             if(!eid){const ref=db.collection("equipe").doc();eid=ref.id;await write(()=>ref.set({nome,funcao:p.funcao||"",telefone:p.telefone||"",ativo:true,criadoEm:new Date().toISOString()}))}
             else nm=respNome(eid);
@@ -2861,8 +2861,8 @@ function formEquipe(){
       if(email&&!email.includes("@"))email+=dom;
       need(!email||/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email),"E-mail inválido.");
       need(!email||!S.usuarios.some(u=>u.id===email),"Esse e-mail já tem acesso.");
-      if(perfil==="gestao-so"){need(email,"Digite o e-mail.");const nome=String(fd.get("nome")||"").trim()||email.split("@")[0];
-        await write(()=>db.doc("usuarios/"+email).set({nome,perfil:"gestao",equipeId:"",criadoEm:new Date().toISOString(),criadoPor:S.me}));toast("Acesso liberado para "+email);closeDlgSafe();return false}
+      if(perfil==="gestao-so"||perfil==="cozinha"){need(email,"Digite o e-mail.");const nome=String(fd.get("nome")||"").trim()||email.split("@")[0];
+        await write(()=>db.doc("usuarios/"+email).set({nome,perfil:perfil==="cozinha"?"cozinha":"gestao",equipeId:"",criadoEm:new Date().toISOString(),criadoPor:S.me}));toast("Acesso liberado para "+email);closeDlgSafe();return false}
       let eid=quem,nome;
       if(!eid){nome=String(fd.get("nome")||"").trim();need(nome,"Digite o nome.");
         const ref=db.collection("equipe").doc();eid=ref.id;
@@ -3383,6 +3383,7 @@ auth.onAuthStateChanged(async u=>{
   let perfil=null;
   try{const s=await db.doc("usuarios/"+email).get();perfil=s.exists?s.data():null}catch(e){perfil=null}
   if(email===FIN)perfil={...(perfil||{}),perfil:"gestao",nome:(perfil&&perfil.nome)||"Financeiro"};
+  if(perfil&&perfil.perfil==="cozinha"){porta(`Seu acesso é ao <b>Mise</b> (estoque e etiquetas da cozinha).<br><a class="btn primary" href="mise/" style="display:inline-block;margin-top:12px;text-decoration:none">Abrir o Mise</a>`,{trocar:true,botao:false});return}
   if(!perfil||!["gestao","comercial"].includes(perfil.perfil)||(perfil.perfil==="comercial"&&!perfil.equipeId)){
     pedirAcesso(u,email);return}
   if(iniciado)return;iniciado=true;
