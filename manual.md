@@ -32,6 +32,9 @@ Todo acesso é feito com uma conta Google e precisa ser aprovado pela Gestão. P
 | Gestão | Tudo: comercial, financeiro, bancos, resultados, controle e equipe |
 | Gestão, sem carteira de vendas | Igual à Gestão, mas não aparece como vendedor nos orçamentos e contratos |
 | Comercial | Os próprios orçamentos, contratos, clientes e recebimentos, a Agenda e as contas a pagar que ele mesmo lançou. Não vê bancos, saldos nem resultados |
+| Cozinha (só o Mise) | Apenas o Mise (etiquetas, validades e estoque), no endereço maitre.boscoeventos.com.br/mise/. Não vê nada do sistema comercial e financeiro |
+
+**Mise (estoque e etiquetas da cozinha).** É um sistema à parte, em maitre.boscoeventos.com.br/mise/, que usa o mesmo login. Quem pede acesso pela tela do Mise aparece em **Equipe** com o perfil **Cozinha** já escolhido; basta aprovar. A Gestão também entra no Mise com a própria conta.
 
 **Alterar ou remover um acesso.** **Orçamentos** → **Equipe** → altere o perfil da pessoa ou use **Tirar acesso**. Ela deixa de entrar na hora.
 
