@@ -9,7 +9,7 @@ O sistema concentra em um só lugar o ciclo comercial e financeiro da Bosco: do 
 | Quem usa | Gestão (financeiro e sócios) e Comercial (vendedores) |
 | Dados | Salvos na nuvem do Google (Firebase), com backup automático diário e semanal |
 
-**Como ler este manual.** As seções seguem o menu lateral do sistema, de cima para baixo. Os nomes de botões aparecem em **negrito**, exatamente como na tela. Use a busca acima para achar um assunto.
+**Como ler este manual.** As seções seguem o menu lateral do sistema, de cima para baixo. Os nomes de botões aparecem em **negrito**, exatamente como na tela. Use a busca acima para achar um assunto. Para abrir o manual, clique em **? Ajuda** no topo de qualquer tela: ele abre direto na parte que explica aquela tela.
 
 **Atualizações.** Quando o sistema ganhar uma função nova, aperte **Ctrl+Shift+R** (no Mac, Cmd+Shift+R) para carregar a versão mais recente.
 

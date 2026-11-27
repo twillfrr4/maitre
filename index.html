@@ -445,7 +445,7 @@ function mdHtml(md){
     h+=`<p>${mdInline(p)}</p>`}
   fecha();return h}
 function vManual(){
-  return `<div class="head"><div><h1>Manual</h1><p class="sub">Como usar o sistema, tela por tela.</p></div><div class="actions"><input class="search" type="search" id="manQ" placeholder="Buscar no manual" style="width:240px"></div></div>
+  return `<div class="head"><div><h1>Manual</h1><p class="sub">Como usar o sistema, tela por tela.</p></div><div class="actions"><a class="btn sm" href="#painel" onclick="if(history.length>1){history.back();return false}">← Voltar</a><input class="search" type="search" id="manQ" placeholder="Buscar no manual" style="width:240px"></div></div>
   <div class="man"><nav class="man-toc" id="manToc"></nav><div class="man-body" id="manBody"><p class="muted">Carregando…</p></div></div>`}
 async function montarManual(){
   const body=document.getElementById("manBody"),toc=document.getElementById("manToc");if(!body)return;
@@ -549,7 +549,7 @@ function renderNav(){
   const venc=S.receber.filter(x=>status(x)==="vencido").length;
   const vp=S.pagar.filter(x=>status(x)==="vencido").length;
   let pendTx=0;for(const m of S.extrato){const t=m.t||{};for(const k in t)if(!t[k].st||t[k].st==="pendente")pendTx++}
-  document.getElementById("nav").innerHTML=NAV.filter(n=>ADMIN()||!["bancos","conciliacao","resultados","controle"].includes(n[0])).map(([k,l,ic])=>{
+  document.getElementById("nav").innerHTML=NAV.filter(n=>n[0]!=="manual"&&(ADMIN()||!["bancos","conciliacao","resultados","controle"].includes(n[0]))).map(([k,l,ic])=>{
     const c=k==="receber"?venc:k==="pagar"?vp:0;
     const pc=k==="conciliacao"?pendTx:k==="orcamentos"?S.orcamentos.filter(followDue).length:0;
     return `<a href="#${k}" ${r===k?'aria-current="page"':""}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ic}</svg><span class="lb">${l}</span>${c?`<span class="count" title="vencidos">${c}</span>`:""}${pc?`<span class="count neutral" title="pendentes">${pc}</span>`:""}</a>`}).join("");
