@@ -768,7 +768,7 @@ const form={productId:null, storage:null, made:new Date(), expires:null};
 function renderProductSelect(){
   const sel=$('#fProd');
   const list=[...S.products].sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
-  if(!list.length){ sel.innerHTML='<option value="">— cadastre um produto na aba Produtos —</option>'; form.productId=null; renderStorage(); renderPreview(); return; }
+  if(!list.length){ sel.innerHTML='<option value="">— cadastre um preparo na aba Preparos —</option>'; form.productId=null; renderStorage(); renderPreview(); return; }
   if(!productById(form.productId)) form.productId=list[0].id;
   sel.innerHTML=list.map(p=>`<option value="${esc(p.id)}"${p.id===form.productId?' selected':''}>${esc(p.name)}${p.category?' · '+esc(p.category):''}</option>`).join('');
   renderStorage();
